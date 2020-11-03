@@ -1,24 +1,10 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * gl520sm.c - Part of lm_sensors, Linux kernel modules for hardware
  *	       monitoring
  * Copyright (c) 1998, 1999  Frodo Looijaard <frodol@dds.nl>,
  *			     Kyösti Mälkki <kmalkki@cc.hut.fi>
  * Copyright (c) 2005	Maarten Deprez <maartendeprez@users.sourceforge.net>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
- *
  */
 
 #include <linux/module.h>
@@ -868,8 +854,7 @@ static void gl520_init_client(struct i2c_client *client)
 	gl520_write_value(client, GL520_REG_BEEP_MASK, data->beep_mask);
 }
 
-static int gl520_probe(struct i2c_client *client,
-		       const struct i2c_device_id *id)
+static int gl520_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
 	struct device *hwmon_dev;
@@ -910,7 +895,7 @@ static struct i2c_driver gl520_driver = {
 	.driver = {
 		.name	= "gl520sm",
 	},
-	.probe		= gl520_probe,
+	.probe_new	= gl520_probe,
 	.id_table	= gl520_id,
 	.detect		= gl520_detect,
 	.address_list	= normal_i2c,

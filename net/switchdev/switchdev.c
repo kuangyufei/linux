@@ -1,12 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * net/switchdev/switchdev.c - Switch device API
  * Copyright (c) 2014-2015 Jiri Pirko <jiri@resnulli.us>
  * Copyright (c) 2014-2015 Scott Feldman <sfeldma@gmail.com>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
  */
 
 #include <linux/kernel.h>
@@ -33,7 +29,7 @@ struct switchdev_deferred_item {
 	struct list_head list;
 	struct net_device *dev;
 	switchdev_deferred_func_t *func;
-	unsigned long data[0];
+	unsigned long data[];
 };
 
 static struct switchdev_deferred_item *switchdev_deferred_dequeue(void)
@@ -308,8 +304,8 @@ static int switchdev_port_obj_add_defer(struct net_device *dev,
  *	switchdev_port_obj_add - Add port object
  *
  *	@dev: port device
- *	@id: object ID
  *	@obj: object to add
+ *	@extack: netlink extended ack
  *
  *	Use a 2-phase prepare-commit transaction model to ensure
  *	system is not left in a partially updated state due to
@@ -361,7 +357,6 @@ static int switchdev_port_obj_del_defer(struct net_device *dev,
  *	switchdev_port_obj_del - Delete port object
  *
  *	@dev: port device
- *	@id: object ID
  *	@obj: object to delete
  *
  *	rtnl_lock must be held and must not be in atomic section,
@@ -409,7 +404,7 @@ EXPORT_SYMBOL_GPL(unregister_switchdev_notifier);
  *	@val: value passed unmodified to notifier function
  *	@dev: port device
  *	@info: notifier information data
- *
+ *	@extack: netlink extended ack
  *	Call all network notifier blocks.
  */
 int call_switchdev_notifiers(unsigned long val, struct net_device *dev,
@@ -479,6 +474,9 @@ static int __switchdev_handle_port_obj_add(struct net_device *dev,
 	 * necessary to go through this helper.
 	 */
 	netdev_for_each_lower_dev(dev, lower_dev, iter) {
+		if (netif_is_bridge_master(lower_dev))
+			continue;
+
 		err = __switchdev_handle_port_obj_add(lower_dev, port_obj_info,
 						      check_cb, add_cb);
 		if (err && err != -EOPNOTSUPP)
@@ -530,6 +528,9 @@ static int __switchdev_handle_port_obj_del(struct net_device *dev,
 	 * necessary to go through this helper.
 	 */
 	netdev_for_each_lower_dev(dev, lower_dev, iter) {
+		if (netif_is_bridge_master(lower_dev))
+			continue;
+
 		err = __switchdev_handle_port_obj_del(lower_dev, port_obj_info,
 						      check_cb, del_cb);
 		if (err && err != -EOPNOTSUPP)
@@ -580,6 +581,9 @@ static int __switchdev_handle_port_attr_set(struct net_device *dev,
 	 * necessary to go through this helper.
 	 */
 	netdev_for_each_lower_dev(dev, lower_dev, iter) {
+		if (netif_is_bridge_master(lower_dev))
+			continue;
+
 		err = __switchdev_handle_port_attr_set(lower_dev, port_attr_info,
 						       check_cb, set_cb);
 		if (err && err != -EOPNOTSUPP)

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * lm83.c - Part of lm_sensors, Linux kernel modules for hardware
  *          monitoring
@@ -15,16 +16,6 @@
  * Also supports the LM82 temp sensor, which is basically a stripped down
  * model of the LM83.  Datasheet is here:
  * http://www.national.com/pf/LM/LM82.html
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  */
 
 #include <linux/module.h>
@@ -326,8 +317,9 @@ static int lm83_detect(struct i2c_client *new_client,
 	return 0;
 }
 
-static int lm83_probe(struct i2c_client *new_client,
-		      const struct i2c_device_id *id)
+static const struct i2c_device_id lm83_id[];
+
+static int lm83_probe(struct i2c_client *new_client)
 {
 	struct device *hwmon_dev;
 	struct lm83_data *data;
@@ -347,7 +339,7 @@ static int lm83_probe(struct i2c_client *new_client,
 	 * declare 1 and 3 common, and then 2 and 4 only for the LM83.
 	 */
 	data->groups[0] = &lm83_group;
-	if (id->driver_data == lm83)
+	if (i2c_match_id(lm83_id, new_client)->driver_data == lm83)
 		data->groups[1] = &lm83_group_opt;
 
 	hwmon_dev = devm_hwmon_device_register_with_groups(&new_client->dev,
@@ -372,7 +364,7 @@ static struct i2c_driver lm83_driver = {
 	.driver = {
 		.name	= "lm83",
 	},
-	.probe		= lm83_probe,
+	.probe_new	= lm83_probe,
 	.id_table	= lm83_id,
 	.detect		= lm83_detect,
 	.address_list	= normal_i2c,

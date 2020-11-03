@@ -1,32 +1,32 @@
+/* SPDX-License-Identifier: GPL-2.0 */
 /*
  * bvec iterator
  *
  * Copyright (C) 2001 Ming Lei <ming.lei@canonical.com>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- *
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public Licens
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-
  */
 #ifndef __LINUX_BVEC_ITER_H
 #define __LINUX_BVEC_ITER_H
 
-#include <linux/kernel.h>
 #include <linux/bug.h>
 #include <linux/errno.h>
+#include <linux/limits.h>
+#include <linux/minmax.h>
 #include <linux/mm.h>
+#include <linux/types.h>
 
-/*
- * was unsigned short, but we might as well be ready for > 64kB I/O pages
+struct page;
+
+/**
+ * struct bio_vec - a contiguous range of physical memory addresses
+ * @bv_page:   First page associated with the address range.
+ * @bv_len:    Number of bytes in the address range.
+ * @bv_offset: Start of the address range relative to the start of @bv_page.
+ *
+ * The following holds for a bvec if n * PAGE_SIZE < bv_offset + bv_len:
+ *
+ *   nth_page(@bv_page, n) == @bv_page + n
+ *
+ * This holds because page_is_mergeable() checks the above property.
  */
 struct bio_vec {
 	struct page	*bv_page;
@@ -50,11 +50,6 @@ struct bvec_iter_all {
 	int		idx;
 	unsigned	done;
 };
-
-static inline struct page *bvec_nth_page(struct page *page, int idx)
-{
-	return idx == 0 ? page : nth_page(page, idx);
-}
 
 /*
  * various member access, note that bio_data should of course not be used
@@ -92,8 +87,8 @@ static inline struct page *bvec_nth_page(struct page *page, int idx)
 	      PAGE_SIZE - bvec_iter_offset((bvec), (iter)))
 
 #define bvec_iter_page(bvec, iter)				\
-	bvec_nth_page(mp_bvec_iter_page((bvec), (iter)),		\
-		      mp_bvec_iter_page_idx((bvec), (iter)))
+	(mp_bvec_iter_page((bvec), (iter)) +			\
+	 mp_bvec_iter_page_idx((bvec), (iter)))
 
 #define bvec_iter_bvec(bvec, iter)				\
 ((struct bio_vec) {						\
@@ -105,34 +100,39 @@ static inline struct page *bvec_nth_page(struct page *page, int idx)
 static inline bool bvec_iter_advance(const struct bio_vec *bv,
 		struct bvec_iter *iter, unsigned bytes)
 {
+	unsigned int idx = iter->bi_idx;
+
 	if (WARN_ONCE(bytes > iter->bi_size,
 		     "Attempted to advance past end of bvec iter\n")) {
 		iter->bi_size = 0;
 		return false;
 	}
 
-	while (bytes) {
-		const struct bio_vec *cur = bv + iter->bi_idx;
-		unsigned len = min3(bytes, iter->bi_size,
-				    cur->bv_len - iter->bi_bvec_done);
+	iter->bi_size -= bytes;
+	bytes += iter->bi_bvec_done;
 
-		bytes -= len;
-		iter->bi_size -= len;
-		iter->bi_bvec_done += len;
-
-		if (iter->bi_bvec_done == cur->bv_len) {
-			iter->bi_bvec_done = 0;
-			iter->bi_idx++;
-		}
+	while (bytes && bytes >= bv[idx].bv_len) {
+		bytes -= bv[idx].bv_len;
+		idx++;
 	}
+
+	iter->bi_idx = idx;
+	iter->bi_bvec_done = bytes;
 	return true;
+}
+
+static inline void bvec_iter_skip_zero_bvec(struct bvec_iter *iter)
+{
+	iter->bi_bvec_done = 0;
+	iter->bi_idx++;
 }
 
 #define for_each_bvec(bvl, bio_vec, iter, start)			\
 	for (iter = (start);						\
 	     (iter).bi_size &&						\
 		((bvl = bvec_iter_bvec((bio_vec), (iter))), 1);	\
-	     bvec_iter_advance((bio_vec), &(iter), (bvl).bv_len))
+	     (bvl).bv_len ? (void)bvec_iter_advance((bio_vec), &(iter),	\
+		     (bvl).bv_len) : bvec_iter_skip_zero_bvec(&(iter)))
 
 /* for iterating one bio from start to end */
 #define BVEC_ITER_ALL_INIT (struct bvec_iter)				\
@@ -145,53 +145,32 @@ static inline bool bvec_iter_advance(const struct bio_vec *bv,
 
 static inline struct bio_vec *bvec_init_iter_all(struct bvec_iter_all *iter_all)
 {
-	iter_all->bv.bv_page = NULL;
 	iter_all->done = 0;
+	iter_all->idx = 0;
 
 	return &iter_all->bv;
 }
 
-static inline void mp_bvec_next_segment(const struct bio_vec *bvec,
-					struct bvec_iter_all *iter_all)
+static inline void bvec_advance(const struct bio_vec *bvec,
+				struct bvec_iter_all *iter_all)
 {
 	struct bio_vec *bv = &iter_all->bv;
 
-	if (bv->bv_page) {
-		bv->bv_page = nth_page(bv->bv_page, 1);
+	if (iter_all->done) {
+		bv->bv_page++;
 		bv->bv_offset = 0;
 	} else {
-		bv->bv_page = bvec->bv_page;
-		bv->bv_offset = bvec->bv_offset;
+		bv->bv_page = bvec->bv_page + (bvec->bv_offset >> PAGE_SHIFT);
+		bv->bv_offset = bvec->bv_offset & ~PAGE_MASK;
 	}
 	bv->bv_len = min_t(unsigned int, PAGE_SIZE - bv->bv_offset,
 			   bvec->bv_len - iter_all->done);
-}
+	iter_all->done += bv->bv_len;
 
-/*
- * Get the last single-page segment from the multi-page bvec and store it
- * in @seg
- */
-static inline void mp_bvec_last_segment(const struct bio_vec *bvec,
-					struct bio_vec *seg)
-{
-	unsigned total = bvec->bv_offset + bvec->bv_len;
-	unsigned last_page = (total - 1) / PAGE_SIZE;
-
-	seg->bv_page = bvec_nth_page(bvec->bv_page, last_page);
-
-	/* the whole segment is inside the last page */
-	if (bvec->bv_offset >= last_page * PAGE_SIZE) {
-		seg->bv_offset = bvec->bv_offset % PAGE_SIZE;
-		seg->bv_len = bvec->bv_len;
-	} else {
-		seg->bv_offset = 0;
-		seg->bv_len = total - last_page * PAGE_SIZE;
+	if (iter_all->done == bvec->bv_len) {
+		iter_all->idx++;
+		iter_all->done = 0;
 	}
 }
-
-#define mp_bvec_for_each_page(pg, bv, i)				\
-	for (i = (bv)->bv_offset / PAGE_SIZE;				\
-		(i <= (((bv)->bv_offset + (bv)->bv_len - 1) / PAGE_SIZE)) && \
-		(pg = bvec_nth_page((bv)->bv_page, i)); i += 1)
 
 #endif /* __LINUX_BVEC_ITER_H */

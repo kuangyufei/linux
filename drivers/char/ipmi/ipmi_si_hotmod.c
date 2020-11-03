@@ -18,7 +18,7 @@ static int hotmod_handler(const char *val, const struct kernel_param *kp);
 
 module_param_call(hotmod, hotmod_handler, NULL, NULL, 0200);
 MODULE_PARM_DESC(hotmod, "Add and remove interfaces.  See"
-		 " Documentation/IPMI.txt in the kernel sources for the"
+		 " Documentation/driver-api/ipmi.rst in the kernel sources for the"
 		 " gory details.");
 
 /*
@@ -108,6 +108,7 @@ static int parse_hotmod_str(const char *curr, enum hotmod_op *op,
 	int rv;
 	unsigned int ival;
 
+	h->iftype = IPMI_PLAT_IF_SI;
 	rv = parse_str(hotmod_ops, &ival, "operation", &curr);
 	if (rv)
 		return rv;

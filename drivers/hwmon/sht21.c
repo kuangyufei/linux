@@ -1,22 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /* Sensirion SHT21 humidity and temperature sensor driver
  *
  * Copyright (C) 2010 Urs Fleisch <urs.fleisch@sensirion.com>
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St - Fifth Floor, Boston, MA 02110-1301 USA
- *
- * Data sheet available at http://www.sensirion.com/file/datasheet_sht21
+ * Data sheet available at https://www.sensirion.com/file/datasheet_sht21
  */
 
 #include <linux/module.h>
@@ -263,8 +250,7 @@ static struct attribute *sht21_attrs[] = {
 
 ATTRIBUTE_GROUPS(sht21);
 
-static int sht21_probe(struct i2c_client *client,
-	const struct i2c_device_id *id)
+static int sht21_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
 	struct device *hwmon_dev;
@@ -299,7 +285,7 @@ MODULE_DEVICE_TABLE(i2c, sht21_id);
 
 static struct i2c_driver sht21_driver = {
 	.driver.name = "sht21",
-	.probe       = sht21_probe,
+	.probe_new   = sht21_probe,
 	.id_table    = sht21_id,
 };
 

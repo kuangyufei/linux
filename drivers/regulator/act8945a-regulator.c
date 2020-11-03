@@ -1,15 +1,10 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * Voltage regulation driver for active-semi ACT8945A PMIC
  *
  * Copyright (C) 2015 Atmel Corporation
  *
  * Author: Wenyou Yang <wenyou.yang@atmel.com>
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License as
- * published by the Free Software Foundation; either version 2 of the
- * License, or (at your option) any later version.
- *
  */
 
 #include <linux/module.h>
@@ -78,7 +73,7 @@ struct act8945a_pmic {
 	u32 op_mode[ACT8945A_ID_MAX];
 };
 
-static const struct regulator_linear_range act8945a_voltage_ranges[] = {
+static const struct linear_range act8945a_voltage_ranges[] = {
 	REGULATOR_LINEAR_RANGE(600000, 0, 23, 25000),
 	REGULATOR_LINEAR_RANGE(1200000, 24, 47, 50000),
 	REGULATOR_LINEAR_RANGE(2400000, 48, 63, 100000),
@@ -174,16 +169,16 @@ static int act8945a_set_mode(struct regulator_dev *rdev, unsigned int mode)
 		reg = ACT8945A_DCDC3_CTRL;
 		break;
 	case ACT8945A_ID_LDO1:
-		reg = ACT8945A_LDO1_SUS;
+		reg = ACT8945A_LDO1_CTRL;
 		break;
 	case ACT8945A_ID_LDO2:
-		reg = ACT8945A_LDO2_SUS;
+		reg = ACT8945A_LDO2_CTRL;
 		break;
 	case ACT8945A_ID_LDO3:
-		reg = ACT8945A_LDO3_SUS;
+		reg = ACT8945A_LDO3_CTRL;
 		break;
 	case ACT8945A_ID_LDO4:
-		reg = ACT8945A_LDO4_SUS;
+		reg = ACT8945A_LDO4_CTRL;
 		break;
 	default:
 		return -EINVAL;

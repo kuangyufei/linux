@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <test_progs.h>
+#include <network_helpers.h>
 
 static void sigalrm_handler(int s) {}
 static struct sigaction sigalrm_action = {
@@ -12,7 +13,7 @@ static void test_signal_pending_by_type(enum bpf_prog_type prog_type)
 	struct itimerval timeo = {
 		.it_value.tv_usec = 100000, /* 100ms */
 	};
-	__u32 duration, retval;
+	__u32 duration = 0, retval;
 	int prog_fd;
 	int err;
 	int i;

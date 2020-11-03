@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * Clause 45 PHY support
  */
@@ -166,7 +167,7 @@ EXPORT_SYMBOL_GPL(genphy_c45_restart_aneg);
  */
 int genphy_c45_check_and_restart_aneg(struct phy_device *phydev, bool restart)
 {
-	int ret = 0;
+	int ret;
 
 	if (!restart) {
 		/* Configure and restart aneg if it wasn't set before */
@@ -179,9 +180,9 @@ int genphy_c45_check_and_restart_aneg(struct phy_device *phydev, bool restart)
 	}
 
 	if (restart)
-		ret = genphy_c45_restart_aneg(phydev);
+		return genphy_c45_restart_aneg(phydev);
 
-	return ret;
+	return 0;
 }
 EXPORT_SYMBOL_GPL(genphy_c45_check_and_restart_aneg);
 
@@ -218,15 +219,30 @@ int genphy_c45_read_link(struct phy_device *phydev)
 	int val, devad;
 	bool link = true;
 
+	if (phydev->c45_ids.mmds_present & MDIO_DEVS_AN) {
+		val = phy_read_mmd(phydev, MDIO_MMD_AN, MDIO_CTRL1);
+		if (val < 0)
+			return val;
+
+		/* Autoneg is being started, therefore disregard current
+		 * link status and report link as down.
+		 */
+		if (val & MDIO_AN_CTRL1_RESTART) {
+			phydev->link = 0;
+			return 0;
+		}
+	}
+
 	while (mmd_mask && link) {
 		devad = __ffs(mmd_mask);
 		mmd_mask &= ~BIT(devad);
 
 		/* The link state is latched low so that momentary link
 		 * drops can be detected. Do not double-read the status
-		 * in polling mode to detect such short link drops.
+		 * in polling mode to detect such short link drops except
+		 * the link was already down.
 		 */
-		if (!phy_polling_mode(phydev)) {
+		if (!phy_polling_mode(phydev) || !phydev->link) {
 			val = phy_read_mmd(phydev, devad, MDIO_STAT1);
 			if (val < 0)
 				return val;
@@ -262,12 +278,30 @@ int genphy_c45_read_lpa(struct phy_device *phydev)
 {
 	int val;
 
+	val = phy_read_mmd(phydev, MDIO_MMD_AN, MDIO_STAT1);
+	if (val < 0)
+		return val;
+
+	if (!(val & MDIO_AN_STAT1_COMPLETE)) {
+		linkmode_clear_bit(ETHTOOL_LINK_MODE_Autoneg_BIT,
+				   phydev->lp_advertising);
+		mii_10gbt_stat_mod_linkmode_lpa_t(phydev->lp_advertising, 0);
+		mii_adv_mod_linkmode_adv_t(phydev->lp_advertising, 0);
+		phydev->pause = 0;
+		phydev->asym_pause = 0;
+
+		return 0;
+	}
+
+	linkmode_mod_bit(ETHTOOL_LINK_MODE_Autoneg_BIT, phydev->lp_advertising,
+			 val & MDIO_AN_STAT1_LPABLE);
+
 	/* Read the link partner's base page advertisement */
 	val = phy_read_mmd(phydev, MDIO_MMD_AN, MDIO_AN_LPA);
 	if (val < 0)
 		return val;
 
-	mii_lpa_mod_linkmode_lpa_t(phydev->lp_advertising, val);
+	mii_adv_mod_linkmode_adv_t(phydev->lp_advertising, val);
 	phydev->pause = val & LPA_PAUSE_CAP ? 1 : 0;
 	phydev->asym_pause = val & LPA_PAUSE_ASYM ? 1 : 0;
 
@@ -289,6 +323,8 @@ EXPORT_SYMBOL_GPL(genphy_c45_read_lpa);
 int genphy_c45_read_pma(struct phy_device *phydev)
 {
 	int val;
+
+	linkmode_zero(phydev->lp_advertising);
 
 	val = phy_read_mmd(phydev, MDIO_MMD_PMAPMD, MDIO_CTRL1);
 	if (val < 0)
@@ -373,7 +409,7 @@ int genphy_c45_pma_read_abilities(struct phy_device *phydev)
 	int val;
 
 	linkmode_clear_bit(ETHTOOL_LINK_MODE_Autoneg_BIT, phydev->supported);
-	if (phydev->c45_ids.devices_in_package & MDIO_DEVS_AN) {
+	if (phydev->c45_ids.mmds_present & MDIO_DEVS_AN) {
 		val = phy_read_mmd(phydev, MDIO_MMD_AN, MDIO_STAT1);
 		if (val < 0)
 			return val;
@@ -490,6 +526,32 @@ int genphy_c45_read_status(struct phy_device *phydev)
 }
 EXPORT_SYMBOL_GPL(genphy_c45_read_status);
 
+/**
+ * genphy_c45_config_aneg - restart auto-negotiation or forced setup
+ * @phydev: target phy_device struct
+ *
+ * Description: If auto-negotiation is enabled, we configure the
+ *   advertising, and then restart auto-negotiation.  If it is not
+ *   enabled, then we force a configuration.
+ */
+int genphy_c45_config_aneg(struct phy_device *phydev)
+{
+	bool changed = false;
+	int ret;
+
+	if (phydev->autoneg == AUTONEG_DISABLE)
+		return genphy_c45_pma_setup_forced(phydev);
+
+	ret = genphy_c45_an_config_aneg(phydev);
+	if (ret < 0)
+		return ret;
+	if (ret > 0)
+		changed = true;
+
+	return genphy_c45_check_and_restart_aneg(phydev, changed);
+}
+EXPORT_SYMBOL_GPL(genphy_c45_config_aneg);
+
 /* The gen10g_* functions are the old Clause 45 stub */
 
 int gen10g_config_aneg(struct phy_device *phydev)
@@ -498,21 +560,9 @@ int gen10g_config_aneg(struct phy_device *phydev)
 }
 EXPORT_SYMBOL_GPL(gen10g_config_aneg);
 
-static int gen10g_read_status(struct phy_device *phydev)
-{
-	/* For now just lie and say it's 10G all the time */
-	phydev->speed = SPEED_10000;
-	phydev->duplex = DUPLEX_FULL;
-
-	return genphy_c45_read_link(phydev);
-}
-
-struct phy_driver genphy_10g_driver = {
+struct phy_driver genphy_c45_driver = {
 	.phy_id         = 0xffffffff,
 	.phy_id_mask    = 0xffffffff,
-	.name           = "Generic 10G PHY",
-	.soft_reset	= genphy_no_soft_reset,
-	.features       = PHY_10GBIT_FEATURES,
-	.config_aneg    = gen10g_config_aneg,
-	.read_status    = gen10g_read_status,
+	.name           = "Generic Clause 45 PHY",
+	.read_status    = genphy_c45_read_status,
 };

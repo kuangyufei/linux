@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * lm93.c - Part of lm_sensors, Linux kernel modules for hardware monitoring
  *
@@ -22,20 +23,6 @@
  *
  * Modified for mainline integration by Hans J. Koch <hjk@hansjkoch.de>
  *	Copyright (c) 2007 Hans J. Koch, Linutronix GmbH
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
 #include <linux/module.h>
@@ -2596,8 +2583,7 @@ static int lm93_detect(struct i2c_client *client, struct i2c_board_info *info)
 	return 0;
 }
 
-static int lm93_probe(struct i2c_client *client,
-		      const struct i2c_device_id *id)
+static int lm93_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
 	struct lm93_data *data;
@@ -2649,7 +2635,7 @@ static struct i2c_driver lm93_driver = {
 	.driver = {
 		.name	= "lm93",
 	},
-	.probe		= lm93_probe,
+	.probe_new	= lm93_probe,
 	.id_table	= lm93_id,
 	.detect		= lm93_detect,
 	.address_list	= normal_i2c,

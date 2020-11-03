@@ -1,10 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * GPIO Chip driver for Analog Devices
  * ADP5588/ADP5587 I/O Expander and QWERTY Keypad Controller
  *
  * Copyright 2009-2010 Analog Devices Inc.
- *
- * Licensed under the GPL-2 or later.
  */
 
 #include <linux/module.h>
@@ -273,13 +272,24 @@ static irqreturn_t adp5588_irq_handler(int irq, void *devid)
 	return IRQ_HANDLED;
 }
 
+
+static int adp5588_irq_init_hw(struct gpio_chip *gc)
+{
+	struct adp5588_gpio *dev = gpiochip_get_data(gc);
+	/* Enable IRQs after registering chip */
+	adp5588_gpio_write(dev->client, CFG,
+			   ADP5588_AUTO_INC | ADP5588_INT_CFG | ADP5588_KE_IEN);
+
+	return 0;
+}
+
 static int adp5588_irq_setup(struct adp5588_gpio *dev)
 {
 	struct i2c_client *client = dev->client;
 	int ret;
 	struct adp5588_gpio_platform_data *pdata =
 			dev_get_platdata(&client->dev);
-	int irq_base = pdata ? pdata->irq_base : 0;
+	struct gpio_irq_chip *girq;
 
 	adp5588_gpio_write(client, CFG, ADP5588_AUTO_INC);
 	adp5588_gpio_write(client, INT_STAT, -1); /* status is W1C */
@@ -295,21 +305,19 @@ static int adp5588_irq_setup(struct adp5588_gpio *dev)
 			client->irq);
 		return ret;
 	}
-	ret = gpiochip_irqchip_add_nested(&dev->gpio_chip,
-					  &adp5588_irq_chip, irq_base,
-					  handle_simple_irq,
-					  IRQ_TYPE_NONE);
-	if (ret) {
-		dev_err(&client->dev,
-			"could not connect irqchip to gpiochip\n");
-		return ret;
-	}
-	gpiochip_set_nested_irqchip(&dev->gpio_chip,
-				    &adp5588_irq_chip,
-				    client->irq);
 
-	adp5588_gpio_write(client, CFG,
-		ADP5588_AUTO_INC | ADP5588_INT_CFG | ADP5588_KE_IEN);
+	/* This will be registered in the call to devm_gpiochip_add_data() */
+	girq = &dev->gpio_chip.irq;
+	girq->chip = &adp5588_irq_chip;
+	/* This will let us handle the parent IRQ in the driver */
+	girq->parent_handler = NULL;
+	girq->num_parents = 0;
+	girq->parents = NULL;
+	girq->first = pdata ? pdata->irq_base : 0;
+	girq->default_type = IRQ_TYPE_NONE;
+	girq->handler = handle_simple_irq;
+	girq->init_hw = adp5588_irq_init_hw;
+	girq->threaded = true;
 
 	return 0;
 }

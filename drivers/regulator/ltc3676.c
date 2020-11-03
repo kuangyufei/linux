@@ -1,15 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (C) 2016 Gateworks Corporation, Inc. All Rights Reserved.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2
- * as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
  */
 #include <linux/i2c.h>
 #include <linux/init.h>
@@ -230,7 +221,7 @@ static const struct regulator_ops ltc3676_fixed_regulator_ops = {
 #define LTC3676_FIXED_REG(_id, _name, _en_reg, _en_bit)                \
 	LTC3676_REG(_id, _name, fixed, LTC3676_ ## _en_reg, _en_bit, 0, 0)
 
-static struct regulator_desc ltc3676_regulators[LTC3676_NUM_REGULATORS] = {
+static const struct regulator_desc ltc3676_regulators[LTC3676_NUM_REGULATORS] = {
 	LTC3676_LINEAR_REG(SW1, sw1, BUCK1, DVB1A),
 	LTC3676_LINEAR_REG(SW2, sw2, BUCK2, DVB2A),
 	LTC3676_LINEAR_REG(SW3, sw3, BUCK3, DVB3A),
@@ -304,8 +295,7 @@ static irqreturn_t ltc3676_isr(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
-static int ltc3676_regulator_probe(struct i2c_client *client,
-				    const struct i2c_device_id *id)
+static int ltc3676_regulator_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
 	struct regulator_init_data *init_data = dev_get_platdata(dev);
@@ -372,7 +362,7 @@ static const struct i2c_device_id ltc3676_i2c_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, ltc3676_i2c_id);
 
-static const struct of_device_id ltc3676_of_match[] = {
+static const struct of_device_id __maybe_unused ltc3676_of_match[] = {
 	{ .compatible = "lltc,ltc3676" },
 	{ },
 };
@@ -383,7 +373,7 @@ static struct i2c_driver ltc3676_driver = {
 		.name = DRIVER_NAME,
 		.of_match_table = of_match_ptr(ltc3676_of_match),
 	},
-	.probe = ltc3676_regulator_probe,
+	.probe_new = ltc3676_regulator_probe,
 	.id_table = ltc3676_i2c_id,
 };
 module_i2c_driver(ltc3676_driver);

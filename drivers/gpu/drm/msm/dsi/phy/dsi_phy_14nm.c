@@ -1,15 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016, The Linux Foundation. All rights reserved.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 and
- * only version 2 as published by the Free Software Foundation.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  */
+
+#include <linux/delay.h>
 
 #include "dsi_phy.h"
 #include "dsi.xml.h"
@@ -165,5 +159,23 @@ const struct msm_dsi_phy_cfg dsi_phy_14nm_cfgs = {
 		.init = dsi_14nm_phy_init,
 	},
 	.io_start = { 0x994400, 0x996400 },
+	.num_dsi_phy = 2,
+};
+
+const struct msm_dsi_phy_cfg dsi_phy_14nm_660_cfgs = {
+	.type = MSM_DSI_PHY_14NM,
+	.src_pll_truthtable = { {false, false}, {true, false} },
+	.reg_cfg = {
+		.num = 1,
+		.regs = {
+			{"vcca", 17000, 32},
+		},
+	},
+	.ops = {
+		.enable = dsi_14nm_phy_enable,
+		.disable = dsi_14nm_phy_disable,
+		.init = dsi_14nm_phy_init,
+	},
+	.io_start = { 0xc994400, 0xc996000 },
 	.num_dsi_phy = 2,
 };

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * A driver for the I2C members of the Abracon AB x8xx RTC family,
  * and compatible: AB 1805 and AB 0805
@@ -7,15 +8,12 @@
  * Author: Philippe De Muyter <phdm@macqel.be>
  * Author: Alexandre Belloni <alexandre.belloni@bootlin.com>
  *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
  */
 
 #include <linux/bcd.h>
 #include <linux/i2c.h>
 #include <linux/module.h>
+#include <linux/of_device.h>
 #include <linux/rtc.h>
 #include <linux/watchdog.h>
 
@@ -404,7 +402,7 @@ static ssize_t autocalibration_store(struct device *dev,
 		return -EINVAL;
 	}
 
-	retval = abx80x_rtc_set_autocalibration(dev, autocalibration);
+	retval = abx80x_rtc_set_autocalibration(dev->parent, autocalibration);
 
 	return retval ? retval : count;
 }
@@ -414,7 +412,7 @@ static ssize_t autocalibration_show(struct device *dev,
 {
 	int autocalibration = 0;
 
-	autocalibration = abx80x_rtc_get_autocalibration(dev);
+	autocalibration = abx80x_rtc_get_autocalibration(dev->parent);
 	if (autocalibration < 0) {
 		dev_err(dev, "Failed to read RTC autocalibration\n");
 		sprintf(buf, "0\n");
@@ -430,7 +428,7 @@ static ssize_t oscillator_store(struct device *dev,
 				struct device_attribute *attr,
 				const char *buf, size_t count)
 {
-	struct i2c_client *client = to_i2c_client(dev);
+	struct i2c_client *client = to_i2c_client(dev->parent);
 	int retval, flags, rc_mode = 0;
 
 	if (strncmp(buf, "rc", 2) == 0) {
@@ -472,7 +470,7 @@ static ssize_t oscillator_show(struct device *dev,
 			       struct device_attribute *attr, char *buf)
 {
 	int rc_mode = 0;
-	struct i2c_client *client = to_i2c_client(dev);
+	struct i2c_client *client = to_i2c_client(dev->parent);
 
 	rc_mode = abx80x_is_rc_mode(client);
 
@@ -526,12 +524,9 @@ static int abx80x_ioctl(struct device *dev, unsigned int cmd, unsigned long arg)
 		if (status < 0)
 			return status;
 
-		tmp = !!(status & ABX8XX_STATUS_BLF);
+		tmp = status & ABX8XX_STATUS_BLF ? RTC_VL_BACKUP_LOW : 0;
 
-		if (copy_to_user((void __user *)arg, &tmp, sizeof(int)))
-			return -EFAULT;
-
-		return 0;
+		return put_user(tmp, (unsigned int __user *)arg);
 
 	case RTC_VL_CLR:
 		status = i2c_smbus_read_byte_data(client, ABX8XX_REG_STATUS);
@@ -560,8 +555,9 @@ static const struct rtc_class_ops abx80x_rtc_ops = {
 	.ioctl		= abx80x_ioctl,
 };
 
-static int abx80x_dt_trickle_cfg(struct device_node *np)
+static int abx80x_dt_trickle_cfg(struct i2c_client *client)
 {
+	struct device_node *np = client->dev.of_node;
 	const char *diode;
 	int trickle_cfg = 0;
 	int i, ret;
@@ -571,12 +567,14 @@ static int abx80x_dt_trickle_cfg(struct device_node *np)
 	if (ret)
 		return ret;
 
-	if (!strcmp(diode, "standard"))
+	if (!strcmp(diode, "standard")) {
 		trickle_cfg |= ABX8XX_TRICKLE_STANDARD_DIODE;
-	else if (!strcmp(diode, "schottky"))
+	} else if (!strcmp(diode, "schottky")) {
 		trickle_cfg |= ABX8XX_TRICKLE_SCHOTTKY_DIODE;
-	else
+	} else {
+		dev_dbg(&client->dev, "Invalid tc-diode value: %s\n", diode);
 		return -EINVAL;
+	}
 
 	ret = of_property_read_u32(np, "abracon,tc-resistor", &tmp);
 	if (ret)
@@ -586,17 +584,12 @@ static int abx80x_dt_trickle_cfg(struct device_node *np)
 		if (trickle_resistors[i] == tmp)
 			break;
 
-	if (i == sizeof(trickle_resistors))
+	if (i == sizeof(trickle_resistors)) {
+		dev_dbg(&client->dev, "Invalid tc-resistor value: %u\n", tmp);
 		return -EINVAL;
+	}
 
 	return (trickle_cfg | i);
-}
-
-static void rtc_calib_remove_sysfs_group(void *_dev)
-{
-	struct device *dev = _dev;
-
-	sysfs_remove_group(&dev->kobj, &rtc_calib_attr_group);
 }
 
 #ifdef CONFIG_WATCHDOG
@@ -806,7 +799,7 @@ static int abx80x_probe(struct i2c_client *client,
 	}
 
 	if (np && abx80x_caps[part].has_tc)
-		trickle_cfg = abx80x_dt_trickle_cfg(np);
+		trickle_cfg = abx80x_dt_trickle_cfg(client);
 
 	if (trickle_cfg > 0) {
 		dev_info(&client->dev, "Enabling trickle charger: %02x\n",
@@ -851,32 +844,14 @@ static int abx80x_probe(struct i2c_client *client,
 		}
 	}
 
-	/* Export sysfs entries */
-	err = sysfs_create_group(&(&client->dev)->kobj, &rtc_calib_attr_group);
+	err = rtc_add_group(priv->rtc, &rtc_calib_attr_group);
 	if (err) {
 		dev_err(&client->dev, "Failed to create sysfs group: %d\n",
 			err);
 		return err;
 	}
 
-	err = devm_add_action_or_reset(&client->dev,
-				       rtc_calib_remove_sysfs_group,
-				       &client->dev);
-	if (err) {
-		dev_err(&client->dev,
-			"Failed to add sysfs cleanup action: %d\n",
-			err);
-		return err;
-	}
-
-	err = rtc_register_device(priv->rtc);
-
-	return err;
-}
-
-static int abx80x_remove(struct i2c_client *client)
-{
-	return 0;
+	return rtc_register_device(priv->rtc);
 }
 
 static const struct i2c_device_id abx80x_id[] = {
@@ -894,12 +869,59 @@ static const struct i2c_device_id abx80x_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, abx80x_id);
 
+#ifdef CONFIG_OF
+static const struct of_device_id abx80x_of_match[] = {
+	{
+		.compatible = "abracon,abx80x",
+		.data = (void *)ABX80X
+	},
+	{
+		.compatible = "abracon,ab0801",
+		.data = (void *)AB0801
+	},
+	{
+		.compatible = "abracon,ab0803",
+		.data = (void *)AB0803
+	},
+	{
+		.compatible = "abracon,ab0804",
+		.data = (void *)AB0804
+	},
+	{
+		.compatible = "abracon,ab0805",
+		.data = (void *)AB0805
+	},
+	{
+		.compatible = "abracon,ab1801",
+		.data = (void *)AB1801
+	},
+	{
+		.compatible = "abracon,ab1803",
+		.data = (void *)AB1803
+	},
+	{
+		.compatible = "abracon,ab1804",
+		.data = (void *)AB1804
+	},
+	{
+		.compatible = "abracon,ab1805",
+		.data = (void *)AB1805
+	},
+	{
+		.compatible = "microcrystal,rv1805",
+		.data = (void *)RV1805
+	},
+	{ }
+};
+MODULE_DEVICE_TABLE(of, abx80x_of_match);
+#endif
+
 static struct i2c_driver abx80x_driver = {
 	.driver		= {
 		.name	= "rtc-abx80x",
+		.of_match_table = of_match_ptr(abx80x_of_match),
 	},
 	.probe		= abx80x_probe,
-	.remove		= abx80x_remove,
 	.id_table	= abx80x_id,
 };
 

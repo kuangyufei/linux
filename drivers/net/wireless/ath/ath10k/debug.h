@@ -65,11 +65,14 @@ struct ath10k_pktlog_hdr {
 	__le16 log_type; /* Type of log information foll this header */
 	__le16 size; /* Size of variable length log information in bytes */
 	__le32 timestamp;
-	u8 payload[0];
+	u8 payload[];
 } __packed;
 
 /* FIXME: How to calculate the buffer size sanely? */
 #define ATH10K_FW_STATS_BUF_SIZE (1024 * 1024)
+
+#define ATH10K_TX_POWER_MAX_VAL 70
+#define ATH10K_TX_POWER_MIN_VAL 0
 
 extern unsigned int ath10k_debug_mask;
 
@@ -122,6 +125,9 @@ static inline int ath10k_debug_is_extd_tx_stats_enabled(struct ath10k *ar)
 {
 	return ar->debug.enable_extd_tx_stats;
 }
+
+int ath10k_debug_fw_stats_request(struct ath10k *ar);
+
 #else
 
 static inline int ath10k_debug_start(struct ath10k *ar)
@@ -189,6 +195,11 @@ static inline int ath10k_debug_is_extd_tx_stats_enabled(struct ath10k *ar)
 	return 0;
 }
 
+static inline int ath10k_debug_fw_stats_request(struct ath10k *ar)
+{
+	return 0;
+}
+
 #define ATH10K_DFS_STAT_INC(ar, c) do { } while (0)
 
 #define ath10k_debug_get_et_strings NULL
@@ -240,18 +251,18 @@ void ath10k_sta_update_rx_tid_stats_ampdu(struct ath10k *ar,
 #endif /* CONFIG_MAC80211_DEBUGFS */
 
 #ifdef CONFIG_ATH10K_DEBUG
-__printf(3, 4) void ath10k_dbg(struct ath10k *ar,
-			       enum ath10k_debug_mask mask,
-			       const char *fmt, ...);
+__printf(3, 4) void __ath10k_dbg(struct ath10k *ar,
+				 enum ath10k_debug_mask mask,
+				 const char *fmt, ...);
 void ath10k_dbg_dump(struct ath10k *ar,
 		     enum ath10k_debug_mask mask,
 		     const char *msg, const char *prefix,
 		     const void *buf, size_t len);
 #else /* CONFIG_ATH10K_DEBUG */
 
-static inline int ath10k_dbg(struct ath10k *ar,
-			     enum ath10k_debug_mask dbg_mask,
-			     const char *fmt, ...)
+static inline int __ath10k_dbg(struct ath10k *ar,
+			       enum ath10k_debug_mask dbg_mask,
+			       const char *fmt, ...)
 {
 	return 0;
 }
@@ -263,4 +274,14 @@ static inline void ath10k_dbg_dump(struct ath10k *ar,
 {
 }
 #endif /* CONFIG_ATH10K_DEBUG */
+
+/* Avoid calling __ath10k_dbg() if debug_mask is not set and tracing
+ * disabled.
+ */
+#define ath10k_dbg(ar, dbg_mask, fmt, ...)			\
+do {								\
+	if ((ath10k_debug_mask & dbg_mask) ||			\
+	    trace_ath10k_log_dbg_enabled())			\
+		__ath10k_dbg(ar, dbg_mask, fmt, ##__VA_ARGS__); \
+} while (0)
 #endif /* _DEBUG_H_ */

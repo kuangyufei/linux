@@ -1,19 +1,10 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /* intel_pch_thermal.c - Intel PCH Thermal driver
  *
  * Copyright (c) 2015, Intel Corporation.
  *
  * Authors:
  *     Tushar Dave <tushar.n.dave@intel.com>
- *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms and conditions of the GNU General Public License,
- * version 2, as published by the Free Software Foundation.
- *
- * This program is distributed in the hope it will be useful, but WITHOUT
- * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
- * more details.
- *
  */
 
 #include <linux/module.h>
@@ -22,6 +13,7 @@
 #include <linux/pci.h>
 #include <linux/acpi.h>
 #include <linux/thermal.h>
+#include <linux/units.h>
 #include <linux/pm.h>
 
 /* Intel PCH thermal Device IDs */
@@ -32,6 +24,8 @@
 #define PCH_THERMAL_DID_SKL_H	0xA131 /* Skylake PCH 100 series */
 #define PCH_THERMAL_DID_CNL	0x9Df9 /* CNL PCH */
 #define PCH_THERMAL_DID_CNL_H	0xA379 /* CNL-H PCH */
+#define PCH_THERMAL_DID_CNL_LP	0x02F9 /* CNL-LP PCH */
+#define PCH_THERMAL_DID_CML_H	0X06F9 /* CML-H PCH */
 
 /* Wildcat Point-LP  PCH Thermal registers */
 #define WPT_TEMP	0x0000	/* Temperature */
@@ -101,7 +95,7 @@ static void pch_wpt_add_acpi_psv_trip(struct pch_thermal_device *ptd,
 		if (ACPI_SUCCESS(status)) {
 			unsigned long trip_temp;
 
-			trip_temp = DECI_KELVIN_TO_MILLICELSIUS(r);
+			trip_temp = deci_kelvin_to_millicelsius(r);
 			if (trip_temp) {
 				ptd->psv_temp = trip_temp;
 				ptd->psv_trip_id = *nr_trips;
@@ -281,6 +275,7 @@ enum board_ids {
 	board_wpt,
 	board_skl,
 	board_cnl,
+	board_cml,
 };
 
 static const struct board_info {
@@ -303,6 +298,10 @@ static const struct board_info {
 		.name = "pch_cannonlake",
 		.ops = &pch_dev_ops_wpt,
 	},
+	[board_cml] = {
+		.name = "pch_cometlake",
+		.ops = &pch_dev_ops_wpt,
+	}
 };
 
 static int intel_pch_thermal_probe(struct pci_dev *pdev,
@@ -354,9 +353,14 @@ static int intel_pch_thermal_probe(struct pci_dev *pdev,
 		err = PTR_ERR(ptd->tzd);
 		goto error_cleanup;
 	}
+	err = thermal_zone_device_enable(ptd->tzd);
+	if (err)
+		goto err_unregister;
 
 	return 0;
 
+err_unregister:
+	thermal_zone_device_unregister(ptd->tzd);
 error_cleanup:
 	iounmap(ptd->hw_base);
 error_release:
@@ -374,22 +378,20 @@ static void intel_pch_thermal_remove(struct pci_dev *pdev)
 	thermal_zone_device_unregister(ptd->tzd);
 	iounmap(ptd->hw_base);
 	pci_set_drvdata(pdev, NULL);
-	pci_release_region(pdev, 0);
+	pci_release_regions(pdev);
 	pci_disable_device(pdev);
 }
 
 static int intel_pch_thermal_suspend(struct device *device)
 {
-	struct pci_dev *pdev = to_pci_dev(device);
-	struct pch_thermal_device *ptd = pci_get_drvdata(pdev);
+	struct pch_thermal_device *ptd = dev_get_drvdata(device);
 
 	return ptd->ops->suspend(ptd);
 }
 
 static int intel_pch_thermal_resume(struct device *device)
 {
-	struct pci_dev *pdev = to_pci_dev(device);
-	struct pch_thermal_device *ptd = pci_get_drvdata(pdev);
+	struct pch_thermal_device *ptd = dev_get_drvdata(device);
 
 	return ptd->ops->resume(ptd);
 }
@@ -409,6 +411,10 @@ static const struct pci_device_id intel_pch_thermal_id[] = {
 		.driver_data = board_cnl, },
 	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCH_THERMAL_DID_CNL_H),
 		.driver_data = board_cnl, },
+	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCH_THERMAL_DID_CNL_LP),
+		.driver_data = board_cnl, },
+	{ PCI_DEVICE(PCI_VENDOR_ID_INTEL, PCH_THERMAL_DID_CML_H),
+		.driver_data = board_cml, },
 	{ 0, },
 };
 MODULE_DEVICE_TABLE(pci, intel_pch_thermal_id);

@@ -87,6 +87,10 @@
 	status = "okay";
 };
 
+&pcie1 {
+	status = "okay";
+};
+
 &sai2 {
 	status = "okay";
 };

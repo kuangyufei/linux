@@ -24,7 +24,7 @@
 
 #include <asm/cacheflush.h>
 #include <asm/intel-family.h>
-#include <asm/resctrl_sched.h>
+#include <asm/resctrl.h>
 #include <asm/perf_event.h>
 
 #include "../../events/perf_event.h" /* For X86_CONFIG() */
@@ -431,11 +431,7 @@ static int pseudo_lock_fn(void *_rdtgrp)
 #else
 	register unsigned int line_size asm("esi");
 	register unsigned int size asm("edi");
-#ifdef CONFIG_X86_64
-	register void *mem_r asm("rbx");
-#else
-	register void *mem_r asm("ebx");
-#endif /* CONFIG_X86_64 */
+	register void *mem_r asm(_ASM_BX);
 #endif /* CONFIG_KASAN */
 
 	/*
@@ -1330,9 +1326,9 @@ int rdtgroup_pseudo_lock_create(struct rdtgroup *rdtgrp)
 	 * pseudo-locked region will still be here on return.
 	 *
 	 * The mutex has to be released temporarily to avoid a potential
-	 * deadlock with the mm->mmap_sem semaphore which is obtained in
-	 * the device_create() and debugfs_create_dir() callpath below
-	 * as well as before the mmap() callback is called.
+	 * deadlock with the mm->mmap_lock which is obtained in the
+	 * device_create() and debugfs_create_dir() callpath below as well as
+	 * before the mmap() callback is called.
 	 */
 	mutex_unlock(&rdtgroup_mutex);
 
@@ -1503,7 +1499,7 @@ static int pseudo_lock_dev_mmap(struct file *filp, struct vm_area_struct *vma)
 	 * may be scheduled elsewhere and invalidate entries in the
 	 * pseudo-locked region.
 	 */
-	if (!cpumask_subset(&current->cpus_allowed, &plr->d->cpu_mask)) {
+	if (!cpumask_subset(current->cpus_ptr, &plr->d->cpu_mask)) {
 		mutex_unlock(&rdtgroup_mutex);
 		return -EINVAL;
 	}

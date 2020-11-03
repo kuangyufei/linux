@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  *   Driver for ARTPEC-6 crypto block using the kernel asynchronous crypto api.
  *
@@ -1248,10 +1249,8 @@ static int artpec6_crypto_aead_set_key(struct crypto_aead *tfm, const u8 *key,
 {
 	struct artpec6_cryptotfm_context *ctx = crypto_tfm_ctx(&tfm->base);
 
-	if (len != 16 && len != 24 && len != 32) {
-		crypto_aead_set_flags(tfm, CRYPTO_TFM_RES_BAD_KEY_LEN);
-		return -1;
-	}
+	if (len != 16 && len != 24 && len != 32)
+		return -EINVAL;
 
 	ctx->key_length = len;
 
@@ -1605,8 +1604,6 @@ artpec6_crypto_cipher_set_key(struct crypto_skcipher *cipher, const u8 *key,
 	case 32:
 		break;
 	default:
-		crypto_skcipher_set_flags(cipher,
-					  CRYPTO_TFM_RES_BAD_KEY_LEN);
 		return -EINVAL;
 	}
 
@@ -1633,8 +1630,6 @@ artpec6_crypto_xts_set_key(struct crypto_skcipher *cipher, const u8 *key,
 	case 64:
 		break;
 	default:
-		crypto_skcipher_set_flags(cipher,
-					  CRYPTO_TFM_RES_BAD_KEY_LEN);
 		return -EINVAL;
 	}
 
@@ -2244,18 +2239,12 @@ artpec6_crypto_hash_set_key(struct crypto_ahash *tfm,
 	blocksize = crypto_tfm_alg_blocksize(crypto_ahash_tfm(tfm));
 
 	if (keylen > blocksize) {
-		SHASH_DESC_ON_STACK(hdesc, tfm_ctx->child_hash);
-
-		hdesc->tfm = tfm_ctx->child_hash;
-		hdesc->flags = crypto_ahash_get_flags(tfm) &
-			       CRYPTO_TFM_REQ_MAY_SLEEP;
-
 		tfm_ctx->hmac_key_length = blocksize;
-		ret = crypto_shash_digest(hdesc, key, keylen,
-					  tfm_ctx->hmac_key);
+
+		ret = crypto_shash_tfm_digest(tfm_ctx->child_hash, key, keylen,
+					      tfm_ctx->hmac_key);
 		if (ret)
 			return ret;
-
 	} else {
 		memcpy(tfm_ctx->hmac_key, key, keylen);
 		tfm_ctx->hmac_key_length = keylen;
@@ -2321,7 +2310,7 @@ static int artpec6_crypto_prepare_submit_hash(struct ahash_request *req)
 
 	case ARTPEC6_CRYPTO_PREPARE_HASH_NO_START:
 		ret = 0;
-		/* Fallthrough */
+		fallthrough;
 
 	default:
 		artpec6_crypto_common_destroy(&req_ctx->common);
@@ -2641,7 +2630,8 @@ static struct ahash_alg hash_algos[] = {
 			.cra_name = "sha1",
 			.cra_driver_name = "artpec-sha1",
 			.cra_priority = 300,
-			.cra_flags = CRYPTO_ALG_ASYNC,
+			.cra_flags = CRYPTO_ALG_ASYNC |
+				     CRYPTO_ALG_ALLOCATES_MEMORY,
 			.cra_blocksize = SHA1_BLOCK_SIZE,
 			.cra_ctxsize = sizeof(struct artpec6_hashalg_context),
 			.cra_alignmask = 3,
@@ -2664,7 +2654,8 @@ static struct ahash_alg hash_algos[] = {
 			.cra_name = "sha256",
 			.cra_driver_name = "artpec-sha256",
 			.cra_priority = 300,
-			.cra_flags = CRYPTO_ALG_ASYNC,
+			.cra_flags = CRYPTO_ALG_ASYNC |
+				     CRYPTO_ALG_ALLOCATES_MEMORY,
 			.cra_blocksize = SHA256_BLOCK_SIZE,
 			.cra_ctxsize = sizeof(struct artpec6_hashalg_context),
 			.cra_alignmask = 3,
@@ -2688,7 +2679,8 @@ static struct ahash_alg hash_algos[] = {
 			.cra_name = "hmac(sha256)",
 			.cra_driver_name = "artpec-hmac-sha256",
 			.cra_priority = 300,
-			.cra_flags = CRYPTO_ALG_ASYNC,
+			.cra_flags = CRYPTO_ALG_ASYNC |
+				     CRYPTO_ALG_ALLOCATES_MEMORY,
 			.cra_blocksize = SHA256_BLOCK_SIZE,
 			.cra_ctxsize = sizeof(struct artpec6_hashalg_context),
 			.cra_alignmask = 3,
@@ -2707,7 +2699,8 @@ static struct skcipher_alg crypto_algos[] = {
 			.cra_name = "ecb(aes)",
 			.cra_driver_name = "artpec6-ecb-aes",
 			.cra_priority = 300,
-			.cra_flags = CRYPTO_ALG_ASYNC,
+			.cra_flags = CRYPTO_ALG_ASYNC |
+				     CRYPTO_ALG_ALLOCATES_MEMORY,
 			.cra_blocksize = AES_BLOCK_SIZE,
 			.cra_ctxsize = sizeof(struct artpec6_cryptotfm_context),
 			.cra_alignmask = 3,
@@ -2728,6 +2721,7 @@ static struct skcipher_alg crypto_algos[] = {
 			.cra_driver_name = "artpec6-ctr-aes",
 			.cra_priority = 300,
 			.cra_flags = CRYPTO_ALG_ASYNC |
+				     CRYPTO_ALG_ALLOCATES_MEMORY |
 				     CRYPTO_ALG_NEED_FALLBACK,
 			.cra_blocksize = 1,
 			.cra_ctxsize = sizeof(struct artpec6_cryptotfm_context),
@@ -2749,7 +2743,8 @@ static struct skcipher_alg crypto_algos[] = {
 			.cra_name = "cbc(aes)",
 			.cra_driver_name = "artpec6-cbc-aes",
 			.cra_priority = 300,
-			.cra_flags = CRYPTO_ALG_ASYNC,
+			.cra_flags = CRYPTO_ALG_ASYNC |
+				     CRYPTO_ALG_ALLOCATES_MEMORY,
 			.cra_blocksize = AES_BLOCK_SIZE,
 			.cra_ctxsize = sizeof(struct artpec6_cryptotfm_context),
 			.cra_alignmask = 3,
@@ -2770,7 +2765,8 @@ static struct skcipher_alg crypto_algos[] = {
 			.cra_name = "xts(aes)",
 			.cra_driver_name = "artpec6-xts-aes",
 			.cra_priority = 300,
-			.cra_flags = CRYPTO_ALG_ASYNC,
+			.cra_flags = CRYPTO_ALG_ASYNC |
+				     CRYPTO_ALG_ALLOCATES_MEMORY,
 			.cra_blocksize = 1,
 			.cra_ctxsize = sizeof(struct artpec6_cryptotfm_context),
 			.cra_alignmask = 3,
@@ -2801,6 +2797,7 @@ static struct aead_alg aead_algos[] = {
 			.cra_driver_name = "artpec-gcm-aes",
 			.cra_priority = 300,
 			.cra_flags = CRYPTO_ALG_ASYNC |
+				     CRYPTO_ALG_ALLOCATES_MEMORY |
 				     CRYPTO_ALG_KERN_DRIVER_ONLY,
 			.cra_blocksize = 1,
 			.cra_ctxsize = sizeof(struct artpec6_cryptotfm_context),
@@ -2855,7 +2852,6 @@ static int artpec6_crypto_probe(struct platform_device *pdev)
 	struct artpec6_crypto *ac;
 	struct device *dev = &pdev->dev;
 	void __iomem *base;
-	struct resource *res;
 	int irq;
 	int err;
 
@@ -2868,8 +2864,7 @@ static int artpec6_crypto_probe(struct platform_device *pdev)
 
 	variant = (enum artpec6_crypto_variant)match->data;
 
-	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	base = devm_ioremap_resource(&pdev->dev, res);
+	base = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(base))
 		return PTR_ERR(base);
 

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * max1619.c - Part of lm_sensors, Linux kernel modules for hardware
  *             monitoring
@@ -9,16 +10,6 @@
  * one external one). Complete datasheet can be
  * obtained from Maxim's website at:
  *   http://pdfserv.maxim-ic.com/en/ds/MAX1619.pdf
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  */
 
 #include <linux/module.h>
@@ -270,8 +261,7 @@ static void max1619_init_client(struct i2c_client *client)
 					  config & 0xBF); /* run */
 }
 
-static int max1619_probe(struct i2c_client *new_client,
-			 const struct i2c_device_id *id)
+static int max1619_probe(struct i2c_client *new_client)
 {
 	struct max1619_data *data;
 	struct device *hwmon_dev;
@@ -315,7 +305,7 @@ static struct i2c_driver max1619_driver = {
 		.name	= "max1619",
 		.of_match_table = of_match_ptr(max1619_of_match),
 	},
-	.probe		= max1619_probe,
+	.probe_new	= max1619_probe,
 	.id_table	= max1619_id,
 	.detect		= max1619_detect,
 	.address_list	= normal_i2c,

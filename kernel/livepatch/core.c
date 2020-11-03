@@ -1,21 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * core.c - Kernel Live Patching Core
  *
  * Copyright (C) 2014 Seth Jennings <sjenning@redhat.com>
  * Copyright (C) 2014 SUSE
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, see <http://www.gnu.org/licenses/>.
  */
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
@@ -30,9 +18,11 @@
 #include <linux/elf.h>
 #include <linux/moduleloader.h>
 #include <linux/completion.h>
+#include <linux/memory.h>
 #include <asm/cacheflush.h>
 #include "core.h"
 #include "patch.h"
+#include "state.h"
 #include "transition.h"
 
 /*
@@ -201,18 +191,21 @@ static int klp_find_object_symbol(const char *objname, const char *name,
 	return -EINVAL;
 }
 
-static int klp_resolve_symbols(Elf_Shdr *relasec, struct module *pmod)
+static int klp_resolve_symbols(Elf64_Shdr *sechdrs, const char *strtab,
+			       unsigned int symndx, Elf_Shdr *relasec,
+			       const char *sec_objname)
 {
-	int i, cnt, vmlinux, ret;
-	char objname[MODULE_NAME_LEN];
-	char symname[KSYM_NAME_LEN];
-	char *strtab = pmod->core_kallsyms.strtab;
+	int i, cnt, ret;
+	char sym_objname[MODULE_NAME_LEN];
+	char sym_name[KSYM_NAME_LEN];
 	Elf_Rela *relas;
 	Elf_Sym *sym;
 	unsigned long sympos, addr;
+	bool sym_vmlinux;
+	bool sec_vmlinux = !strcmp(sec_objname, "vmlinux");
 
 	/*
-	 * Since the field widths for objname and symname in the sscanf()
+	 * Since the field widths for sym_objname and sym_name in the sscanf()
 	 * call are hard-coded and correspond to MODULE_NAME_LEN and
 	 * KSYM_NAME_LEN respectively, we must make sure that MODULE_NAME_LEN
 	 * and KSYM_NAME_LEN have the values we expect them to have.
@@ -226,27 +219,40 @@ static int klp_resolve_symbols(Elf_Shdr *relasec, struct module *pmod)
 	relas = (Elf_Rela *) relasec->sh_addr;
 	/* For each rela in this klp relocation section */
 	for (i = 0; i < relasec->sh_size / sizeof(Elf_Rela); i++) {
-		sym = pmod->core_kallsyms.symtab + ELF_R_SYM(relas[i].r_info);
+		sym = (Elf64_Sym *)sechdrs[symndx].sh_addr + ELF_R_SYM(relas[i].r_info);
 		if (sym->st_shndx != SHN_LIVEPATCH) {
 			pr_err("symbol %s is not marked as a livepatch symbol\n",
 			       strtab + sym->st_name);
 			return -EINVAL;
 		}
 
-		/* Format: .klp.sym.objname.symname,sympos */
+		/* Format: .klp.sym.sym_objname.sym_name,sympos */
 		cnt = sscanf(strtab + sym->st_name,
 			     ".klp.sym.%55[^.].%127[^,],%lu",
-			     objname, symname, &sympos);
+			     sym_objname, sym_name, &sympos);
 		if (cnt != 3) {
 			pr_err("symbol %s has an incorrectly formatted name\n",
 			       strtab + sym->st_name);
 			return -EINVAL;
 		}
 
+		sym_vmlinux = !strcmp(sym_objname, "vmlinux");
+
+		/*
+		 * Prevent module-specific KLP rela sections from referencing
+		 * vmlinux symbols.  This helps prevent ordering issues with
+		 * module special section initializations.  Presumably such
+		 * symbols are exported and normal relas can be used instead.
+		 */
+		if (!sec_vmlinux && sym_vmlinux) {
+			pr_err("invalid access to vmlinux symbol '%s' from module-specific livepatch relocation section",
+			       sym_name);
+			return -EINVAL;
+		}
+
 		/* klp_find_object_symbol() treats a NULL objname as vmlinux */
-		vmlinux = !strcmp(objname, "vmlinux");
-		ret = klp_find_object_symbol(vmlinux ? NULL : objname,
-					     symname, sympos, &addr);
+		ret = klp_find_object_symbol(sym_vmlinux ? NULL : sym_objname,
+					     sym_name, sympos, &addr);
 		if (ret)
 			return ret;
 
@@ -256,54 +262,59 @@ static int klp_resolve_symbols(Elf_Shdr *relasec, struct module *pmod)
 	return 0;
 }
 
-static int klp_write_object_relocations(struct module *pmod,
-					struct klp_object *obj)
+/*
+ * At a high-level, there are two types of klp relocation sections: those which
+ * reference symbols which live in vmlinux; and those which reference symbols
+ * which live in other modules.  This function is called for both types:
+ *
+ * 1) When a klp module itself loads, the module code calls this function to
+ *    write vmlinux-specific klp relocations (.klp.rela.vmlinux.* sections).
+ *    These relocations are written to the klp module text to allow the patched
+ *    code/data to reference unexported vmlinux symbols.  They're written as
+ *    early as possible to ensure that other module init code (.e.g.,
+ *    jump_label_apply_nops) can access any unexported vmlinux symbols which
+ *    might be referenced by the klp module's special sections.
+ *
+ * 2) When a to-be-patched module loads -- or is already loaded when a
+ *    corresponding klp module loads -- klp code calls this function to write
+ *    module-specific klp relocations (.klp.rela.{module}.* sections).  These
+ *    are written to the klp module text to allow the patched code/data to
+ *    reference symbols which live in the to-be-patched module or one of its
+ *    module dependencies.  Exported symbols are supported, in addition to
+ *    unexported symbols, in order to enable late module patching, which allows
+ *    the to-be-patched module to be loaded and patched sometime *after* the
+ *    klp module is loaded.
+ */
+int klp_apply_section_relocs(struct module *pmod, Elf_Shdr *sechdrs,
+			     const char *shstrtab, const char *strtab,
+			     unsigned int symndx, unsigned int secndx,
+			     const char *objname)
 {
-	int i, cnt, ret = 0;
-	const char *objname, *secname;
+	int cnt, ret;
 	char sec_objname[MODULE_NAME_LEN];
-	Elf_Shdr *sec;
+	Elf_Shdr *sec = sechdrs + secndx;
 
-	if (WARN_ON(!klp_is_object_loaded(obj)))
+	/*
+	 * Format: .klp.rela.sec_objname.section_name
+	 * See comment in klp_resolve_symbols() for an explanation
+	 * of the selected field width value.
+	 */
+	cnt = sscanf(shstrtab + sec->sh_name, ".klp.rela.%55[^.]",
+		     sec_objname);
+	if (cnt != 1) {
+		pr_err("section %s has an incorrectly formatted name\n",
+		       shstrtab + sec->sh_name);
 		return -EINVAL;
-
-	objname = klp_is_module(obj) ? obj->name : "vmlinux";
-
-	/* For each klp relocation section */
-	for (i = 1; i < pmod->klp_info->hdr.e_shnum; i++) {
-		sec = pmod->klp_info->sechdrs + i;
-		secname = pmod->klp_info->secstrings + sec->sh_name;
-		if (!(sec->sh_flags & SHF_RELA_LIVEPATCH))
-			continue;
-
-		/*
-		 * Format: .klp.rela.sec_objname.section_name
-		 * See comment in klp_resolve_symbols() for an explanation
-		 * of the selected field width value.
-		 */
-		cnt = sscanf(secname, ".klp.rela.%55[^.]", sec_objname);
-		if (cnt != 1) {
-			pr_err("section %s has an incorrectly formatted name\n",
-			       secname);
-			ret = -EINVAL;
-			break;
-		}
-
-		if (strcmp(objname, sec_objname))
-			continue;
-
-		ret = klp_resolve_symbols(sec, pmod);
-		if (ret)
-			break;
-
-		ret = apply_relocate_add(pmod->klp_info->sechdrs,
-					 pmod->core_kallsyms.strtab,
-					 pmod->klp_info->symndx, i, pmod);
-		if (ret)
-			break;
 	}
 
-	return ret;
+	if (strcmp(objname ? objname : "vmlinux", sec_objname))
+		return 0;
+
+	ret = klp_resolve_symbols(sechdrs, strtab, symndx, sec, sec_objname);
+	if (ret)
+		return ret;
+
+	return apply_relocate_add(sechdrs, strtab, symndx, secndx, pmod);
 }
 
 /*
@@ -419,6 +430,7 @@ static struct attribute *klp_patch_attrs[] = {
 	&force_kobj_attr.attr,
 	NULL
 };
+ATTRIBUTE_GROUPS(klp_patch);
 
 static void klp_free_object_dynamic(struct klp_object *obj)
 {
@@ -426,7 +438,13 @@ static void klp_free_object_dynamic(struct klp_object *obj)
 	kfree(obj);
 }
 
-static struct klp_object *klp_alloc_object_dynamic(const char *name)
+static void klp_init_func_early(struct klp_object *obj,
+				struct klp_func *func);
+static void klp_init_object_early(struct klp_patch *patch,
+				  struct klp_object *obj);
+
+static struct klp_object *klp_alloc_object_dynamic(const char *name,
+						   struct klp_patch *patch)
 {
 	struct klp_object *obj;
 
@@ -442,7 +460,7 @@ static struct klp_object *klp_alloc_object_dynamic(const char *name)
 		}
 	}
 
-	INIT_LIST_HEAD(&obj->func_list);
+	klp_init_object_early(patch, obj);
 	obj->dynamic = true;
 
 	return obj;
@@ -471,6 +489,7 @@ static struct klp_func *klp_alloc_func_nop(struct klp_func *old_func,
 		}
 	}
 
+	klp_init_func_early(obj, func);
 	/*
 	 * func->new_func is same as func->old_func. These addresses are
 	 * set when the object is loaded, see klp_init_object_loaded().
@@ -490,11 +509,9 @@ static int klp_add_object_nops(struct klp_patch *patch,
 	obj = klp_find_object(patch, old_obj);
 
 	if (!obj) {
-		obj = klp_alloc_object_dynamic(old_obj->name);
+		obj = klp_alloc_object_dynamic(old_obj->name, patch);
 		if (!obj)
 			return -ENOMEM;
-
-		list_add_tail(&obj->node, &patch->obj_list);
 	}
 
 	klp_for_each_func(old_obj, old_func) {
@@ -505,8 +522,6 @@ static int klp_add_object_nops(struct klp_patch *patch,
 		func = klp_alloc_func_nop(old_func, obj);
 		if (!func)
 			return -ENOMEM;
-
-		list_add_tail(&func->node, &obj->func_list);
 	}
 
 	return 0;
@@ -546,7 +561,7 @@ static void klp_kobj_release_patch(struct kobject *kobj)
 static struct kobj_type klp_ktype_patch = {
 	.release = klp_kobj_release_patch,
 	.sysfs_ops = &kobj_sysfs_ops,
-	.default_attrs = klp_patch_attrs,
+	.default_groups = klp_patch_groups,
 };
 
 static void klp_kobj_release_object(struct kobject *kobj)
@@ -588,13 +603,7 @@ static void __klp_free_funcs(struct klp_object *obj, bool nops_only)
 			continue;
 
 		list_del(&func->node);
-
-		/* Might be called from klp_init_patch() error path. */
-		if (func->kobj_added) {
-			kobject_put(&func->kobj);
-		} else if (func->nop) {
-			klp_free_func_nop(func);
-		}
+		kobject_put(&func->kobj);
 	}
 }
 
@@ -624,13 +633,7 @@ static void __klp_free_objects(struct klp_patch *patch, bool nops_only)
 			continue;
 
 		list_del(&obj->node);
-
-		/* Might be called from klp_init_patch() error path. */
-		if (obj->kobj_added) {
-			kobject_put(&obj->kobj);
-		} else if (obj->dynamic) {
-			klp_free_object_dynamic(obj);
-		}
+		kobject_put(&obj->kobj);
 	}
 }
 
@@ -651,7 +654,7 @@ static void klp_free_objects_dynamic(struct klp_patch *patch)
  * The operation must be completed by calling klp_free_patch_finish()
  * outside klp_mutex.
  */
-void klp_free_patch_start(struct klp_patch *patch)
+static void klp_free_patch_start(struct klp_patch *patch)
 {
 	if (!list_empty(&patch->list))
 		list_del(&patch->list);
@@ -675,10 +678,8 @@ static void klp_free_patch_finish(struct klp_patch *patch)
 	 * this is called when the patch gets disabled and it
 	 * cannot get enabled again.
 	 */
-	if (patch->kobj_added) {
-		kobject_put(&patch->kobj);
-		wait_for_completion(&patch->finish);
-	}
+	kobject_put(&patch->kobj);
+	wait_for_completion(&patch->finish);
 
 	/* Put the module after the last access to struct klp_patch. */
 	if (!patch->forced)
@@ -698,10 +699,25 @@ static void klp_free_patch_work_fn(struct work_struct *work)
 	klp_free_patch_finish(patch);
 }
 
+void klp_free_patch_async(struct klp_patch *patch)
+{
+	klp_free_patch_start(patch);
+	schedule_work(&patch->free_work);
+}
+
+void klp_free_replaced_patches_async(struct klp_patch *new_patch)
+{
+	struct klp_patch *old_patch, *tmp_patch;
+
+	klp_for_each_patch_safe(old_patch, tmp_patch) {
+		if (old_patch == new_patch)
+			return;
+		klp_free_patch_async(old_patch);
+	}
+}
+
 static int klp_init_func(struct klp_object *obj, struct klp_func *func)
 {
-	int ret;
-
 	if (!func->old_name)
 		return -EINVAL;
 
@@ -724,19 +740,32 @@ static int klp_init_func(struct klp_object *obj, struct klp_func *func)
 	 * object. If the user selects 0 for old_sympos, then 1 will be used
 	 * since a unique symbol will be the first occurrence.
 	 */
-	ret = kobject_init_and_add(&func->kobj, &klp_ktype_func,
-				   &obj->kobj, "%s,%lu", func->old_name,
-				   func->old_sympos ? func->old_sympos : 1);
-	if (!ret)
-		func->kobj_added = true;
-
-	return ret;
+	return kobject_add(&func->kobj, &obj->kobj, "%s,%lu",
+			   func->old_name,
+			   func->old_sympos ? func->old_sympos : 1);
 }
 
-/* Arches may override this to finish any remaining arch-specific tasks */
-void __weak arch_klp_init_object_loaded(struct klp_patch *patch,
-					struct klp_object *obj)
+static int klp_apply_object_relocs(struct klp_patch *patch,
+				   struct klp_object *obj)
 {
+	int i, ret;
+	struct klp_modinfo *info = patch->mod->klp_info;
+
+	for (i = 1; i < info->hdr.e_shnum; i++) {
+		Elf_Shdr *sec = info->sechdrs + i;
+
+		if (!(sec->sh_flags & SHF_RELA_LIVEPATCH))
+			continue;
+
+		ret = klp_apply_section_relocs(patch->mod, info->sechdrs,
+					       info->secstrings,
+					       patch->mod->core_kallsyms.strtab,
+					       info->symndx, i, obj->name);
+		if (ret)
+			return ret;
+	}
+
+	return 0;
 }
 
 /* parts of the initialization that is done only when the object is loaded */
@@ -746,15 +775,17 @@ static int klp_init_object_loaded(struct klp_patch *patch,
 	struct klp_func *func;
 	int ret;
 
-	module_disable_ro(patch->mod);
-	ret = klp_write_object_relocations(patch->mod, obj);
-	if (ret) {
-		module_enable_ro(patch->mod, true);
-		return ret;
+	if (klp_is_module(obj)) {
+		/*
+		 * Only write module-specific relocations here
+		 * (.klp.rela.{module}.*).  vmlinux-specific relocations were
+		 * written earlier during the initialization of the klp module
+		 * itself.
+		 */
+		ret = klp_apply_object_relocs(patch, obj);
+		if (ret)
+			return ret;
 	}
-
-	arch_klp_init_object_loaded(patch, obj);
-	module_enable_ro(patch->mod, true);
 
 	klp_for_each_func(obj, func) {
 		ret = klp_find_object_symbol(obj->name, func->old_name,
@@ -801,11 +832,9 @@ static int klp_init_object(struct klp_patch *patch, struct klp_object *obj)
 	klp_find_object_module(obj);
 
 	name = klp_is_module(obj) ? obj->name : "vmlinux";
-	ret = kobject_init_and_add(&obj->kobj, &klp_ktype_object,
-				   &patch->kobj, "%s", name);
+	ret = kobject_add(&obj->kobj, &patch->kobj, "%s", name);
 	if (ret)
 		return ret;
-	obj->kobj_added = true;
 
 	klp_for_each_func(obj, func) {
 		ret = klp_init_func(obj, func);
@@ -819,6 +848,21 @@ static int klp_init_object(struct klp_patch *patch, struct klp_object *obj)
 	return ret;
 }
 
+static void klp_init_func_early(struct klp_object *obj,
+				struct klp_func *func)
+{
+	kobject_init(&func->kobj, &klp_ktype_func);
+	list_add_tail(&func->node, &obj->func_list);
+}
+
+static void klp_init_object_early(struct klp_patch *patch,
+				  struct klp_object *obj)
+{
+	INIT_LIST_HEAD(&obj->func_list);
+	kobject_init(&obj->kobj, &klp_ktype_object);
+	list_add_tail(&obj->node, &patch->obj_list);
+}
+
 static int klp_init_patch_early(struct klp_patch *patch)
 {
 	struct klp_object *obj;
@@ -829,7 +873,7 @@ static int klp_init_patch_early(struct klp_patch *patch)
 
 	INIT_LIST_HEAD(&patch->list);
 	INIT_LIST_HEAD(&patch->obj_list);
-	patch->kobj_added = false;
+	kobject_init(&patch->kobj, &klp_ktype_patch);
 	patch->enabled = false;
 	patch->forced = false;
 	INIT_WORK(&patch->free_work, klp_free_patch_work_fn);
@@ -839,13 +883,10 @@ static int klp_init_patch_early(struct klp_patch *patch)
 		if (!obj->funcs)
 			return -EINVAL;
 
-		INIT_LIST_HEAD(&obj->func_list);
-		obj->kobj_added = false;
-		list_add_tail(&obj->node, &patch->obj_list);
+		klp_init_object_early(patch, obj);
 
 		klp_for_each_func_static(obj, func) {
-			func->kobj_added = false;
-			list_add_tail(&func->node, &obj->func_list);
+			klp_init_func_early(obj, func);
 		}
 	}
 
@@ -860,11 +901,9 @@ static int klp_init_patch(struct klp_patch *patch)
 	struct klp_object *obj;
 	int ret;
 
-	ret = kobject_init_and_add(&patch->kobj, &klp_ktype_patch,
-				   klp_root_kobj, "%s", patch->mod->name);
+	ret = kobject_add(&patch->kobj, klp_root_kobj, "%s", patch->mod->name);
 	if (ret)
 		return ret;
-	patch->kobj_added = true;
 
 	if (patch->replace) {
 		ret = klp_add_nops(patch);
@@ -924,9 +963,6 @@ static int __klp_enable_patch(struct klp_patch *patch)
 		return -EBUSY;
 
 	if (WARN_ON(patch->enabled))
-		return -EINVAL;
-
-	if (!patch->kobj_added)
 		return -EINVAL;
 
 	pr_notice("enabling patch '%s'\n", patch->mod->name);
@@ -1003,12 +1039,18 @@ int klp_enable_patch(struct klp_patch *patch)
 		return -ENODEV;
 
 	if (!klp_have_reliable_stack()) {
-		pr_err("This architecture doesn't have support for the livepatch consistency model.\n");
-		return -EOPNOTSUPP;
+		pr_warn("This architecture doesn't have support for the livepatch consistency model.\n");
+		pr_warn("The livepatch transition may never complete.\n");
 	}
 
-
 	mutex_lock(&klp_mutex);
+
+	if (!klp_is_patch_compatible(patch)) {
+		pr_err("Livepatch patch (%s) is not compatible with the already installed livepatches.\n",
+			patch->mod->name);
+		mutex_unlock(&klp_mutex);
+		return -EINVAL;
+	}
 
 	ret = klp_init_patch_early(patch);
 	if (ret) {
@@ -1040,12 +1082,13 @@ err:
 EXPORT_SYMBOL_GPL(klp_enable_patch);
 
 /*
- * This function removes replaced patches.
+ * This function unpatches objects from the replaced livepatches.
  *
  * We could be pretty aggressive here. It is called in the situation where
- * these structures are no longer accessible. All functions are redirected
- * by the klp_transition_patch. They use either a new code or they are in
- * the original code because of the special nop function patches.
+ * these structures are no longer accessed from the ftrace handler.
+ * All functions are redirected by the klp_transition_patch. They
+ * use either a new code or they are in the original code because
+ * of the special nop function patches.
  *
  * The only exception is when the transition was forced. In this case,
  * klp_ftrace_handler() might still see the replaced patch on the stack.
@@ -1053,18 +1096,16 @@ EXPORT_SYMBOL_GPL(klp_enable_patch);
  * thanks to RCU. We only have to keep the patches on the system. Also
  * this is handled transparently by patch->module_put.
  */
-void klp_discard_replaced_patches(struct klp_patch *new_patch)
+void klp_unpatch_replaced_patches(struct klp_patch *new_patch)
 {
-	struct klp_patch *old_patch, *tmp_patch;
+	struct klp_patch *old_patch;
 
-	klp_for_each_patch_safe(old_patch, tmp_patch) {
+	klp_for_each_patch(old_patch) {
 		if (old_patch == new_patch)
 			return;
 
 		old_patch->enabled = false;
 		klp_unpatch_objects(old_patch);
-		klp_free_patch_start(old_patch);
-		schedule_work(&old_patch->free_work);
 	}
 }
 
@@ -1133,6 +1174,11 @@ int klp_module_coming(struct module *mod)
 	if (WARN_ON(mod->state != MODULE_STATE_COMING))
 		return -EINVAL;
 
+	if (!strcmp(mod->name, "vmlinux")) {
+		pr_err("vmlinux.ko: invalid module name");
+		return -EINVAL;
+	}
+
 	mutex_lock(&klp_mutex);
 	/*
 	 * Each module has to know that klp_module_coming()
@@ -1193,6 +1239,7 @@ err:
 	pr_warn("patch '%s' failed for module '%s', refusing to load module '%s'\n",
 		patch->mod->name, obj->mod->name, obj->mod->name);
 	mod->klp_alive = false;
+	obj->mod = NULL;
 	klp_cleanup_module_patches_limited(mod, patch);
 	mutex_unlock(&klp_mutex);
 
@@ -1220,14 +1267,6 @@ void klp_module_going(struct module *mod)
 
 static int __init klp_init(void)
 {
-	int ret;
-
-	ret = klp_check_compiler_support();
-	if (ret) {
-		pr_info("Your compiler is too old; turning off.\n");
-		return -EINVAL;
-	}
-
 	klp_root_kobj = kobject_create_and_add("livepatch", kernel_kobj);
 	if (!klp_root_kobj)
 		return -ENOMEM;

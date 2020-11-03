@@ -1,13 +1,10 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * wm8998.c -- ALSA SoC Audio driver for WM8998 codecs
  *
  * Copyright 2015 Cirrus Logic, Inc.
  *
  * Author: Richard Fitzgerald <rf@opensource.wolfsonmicro.com>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
  */
 
 #include <linux/module.h>
@@ -46,7 +43,7 @@ static int wm8998_asrc_ev(struct snd_soc_dapm_widget *w,
 
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
-		val = snd_soc_component_read32(component, ARIZONA_ASRC_RATE1);
+		val = snd_soc_component_read(component, ARIZONA_ASRC_RATE1);
 		val &= ARIZONA_ASRC_RATE1_MASK;
 		val >>= ARIZONA_ASRC_RATE1_SHIFT;
 
@@ -54,7 +51,7 @@ static int wm8998_asrc_ev(struct snd_soc_dapm_widget *w,
 		case 0:
 		case 1:
 		case 2:
-			val = snd_soc_component_read32(component,
+			val = snd_soc_component_read(component,
 					   ARIZONA_SAMPLE_RATE_1 + val);
 			if (val >= 0x11) {
 				dev_warn(component->dev,
@@ -70,7 +67,7 @@ static int wm8998_asrc_ev(struct snd_soc_dapm_widget *w,
 			return -EINVAL;
 		}
 
-		val = snd_soc_component_read32(component, ARIZONA_ASRC_RATE2);
+		val = snd_soc_component_read(component, ARIZONA_ASRC_RATE2);
 		val &= ARIZONA_ASRC_RATE2_MASK;
 		val >>= ARIZONA_ASRC_RATE2_SHIFT;
 
@@ -78,7 +75,7 @@ static int wm8998_asrc_ev(struct snd_soc_dapm_widget *w,
 		case 8:
 		case 9:
 			val -= 0x8;
-			val = snd_soc_component_read32(component,
+			val = snd_soc_component_read(component,
 					   ARIZONA_ASYNC_SAMPLE_RATE_1 + val);
 			if (val >= 0x11) {
 				dev_warn(component->dev,

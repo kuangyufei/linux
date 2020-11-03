@@ -82,6 +82,8 @@ sequentially and type id is assigned to each recognized type starting from id
     #define BTF_KIND_RESTRICT       11      /* Restrict     */
     #define BTF_KIND_FUNC           12      /* Function     */
     #define BTF_KIND_FUNC_PROTO     13      /* Function Proto       */
+    #define BTF_KIND_VAR            14      /* Variable     */
+    #define BTF_KIND_DATASEC        15      /* Section      */
 
 Note that the type section encodes debug info, not just pure types.
 ``BTF_KIND_FUNC`` is not a type, and it represents a defined subprogram.
@@ -129,7 +131,7 @@ The following sections detail encoding of each kind.
 ``btf_type`` is followed by a ``u32`` with the following bits arrangement::
 
   #define BTF_INT_ENCODING(VAL)   (((VAL) & 0x0f000000) >> 24)
-  #define BTF_INT_OFFSET(VAL)     (((VAL  & 0x00ff0000)) >> 16)
+  #define BTF_INT_OFFSET(VAL)     (((VAL) & 0x00ff0000) >> 16)
   #define BTF_INT_BITS(VAL)       ((VAL)  & 0x000000ff)
 
 The ``BTF_INT_ENCODING`` has the following attributes::
@@ -148,9 +150,11 @@ The ``btf_type.size * 8`` must be equal to or greater than ``BTF_INT_BITS()``
 for the type. The maximum value of ``BTF_INT_BITS()`` is 128.
 
 The ``BTF_INT_OFFSET()`` specifies the starting bit offset to calculate values
-for this int. For example, a bitfield struct member has: * btf member bit
-offset 100 from the start of the structure, * btf member pointing to an int
-type, * the int type has ``BTF_INT_OFFSET() = 2`` and ``BTF_INT_BITS() = 4``
+for this int. For example, a bitfield struct member has:
+
+ * btf member bit offset 100 from the start of the structure,
+ * btf member pointing to an int type,
+ * the int type has ``BTF_INT_OFFSET() = 2`` and ``BTF_INT_BITS() = 4``
 
 Then in the struct memory layout, this member will occupy ``4`` bits starting
 from bits ``100 + 2 = 102``.
@@ -393,6 +397,61 @@ refers to parameter type.
 If the function has variable arguments, the last parameter is encoded with
 ``name_off = 0`` and ``type = 0``.
 
+2.2.14 BTF_KIND_VAR
+~~~~~~~~~~~~~~~~~~~
+
+``struct btf_type`` encoding requirement:
+  * ``name_off``: offset to a valid C identifier
+  * ``info.kind_flag``: 0
+  * ``info.kind``: BTF_KIND_VAR
+  * ``info.vlen``: 0
+  * ``type``: the type of the variable
+
+``btf_type`` is followed by a single ``struct btf_variable`` with the
+following data::
+
+    struct btf_var {
+        __u32   linkage;
+    };
+
+``struct btf_var`` encoding:
+  * ``linkage``: currently only static variable 0, or globally allocated
+                 variable in ELF sections 1
+
+Not all type of global variables are supported by LLVM at this point.
+The following is currently available:
+
+  * static variables with or without section attributes
+  * global variables with section attributes
+
+The latter is for future extraction of map key/value type id's from a
+map definition.
+
+2.2.15 BTF_KIND_DATASEC
+~~~~~~~~~~~~~~~~~~~~~~~
+
+``struct btf_type`` encoding requirement:
+  * ``name_off``: offset to a valid name associated with a variable or
+                  one of .data/.bss/.rodata
+  * ``info.kind_flag``: 0
+  * ``info.kind``: BTF_KIND_DATASEC
+  * ``info.vlen``: # of variables
+  * ``size``: total section size in bytes (0 at compilation time, patched
+              to actual size by BPF loaders such as libbpf)
+
+``btf_type`` is followed by ``info.vlen`` number of ``struct btf_var_secinfo``.::
+
+    struct btf_var_secinfo {
+        __u32   type;
+        __u32   offset;
+        __u32   size;
+    };
+
+``struct btf_var_secinfo`` encoding:
+  * ``type``: the type of the BTF_KIND_VAR variable
+  * ``offset``: the in-section offset of the variable
+  * ``size``: the size of the variable in bytes
+
 3. BTF Kernel API
 *****************
 
@@ -521,6 +580,7 @@ For line_info, the line number and column number are defined as below:
     #define BPF_LINE_INFO_LINE_COL(line_col)        ((line_col) & 0x3ff)
 
 3.4 BPF_{PROG,MAP}_GET_NEXT_ID
+==============================
 
 In kernel, every loaded program, map or btf has a unique id. The id won't
 change during the lifetime of a program, map, or btf.
@@ -530,6 +590,7 @@ each command, to user space, for bpf program or maps, respectively, so an
 inspection tool can inspect all programs and maps.
 
 3.5 BPF_{PROG,MAP}_GET_FD_BY_ID
+===============================
 
 An introspection tool cannot use id to get details about program or maps.
 A file descriptor needs to be obtained first for reference-counting purpose.
@@ -629,6 +690,67 @@ The interpretation of ``bpf_func_info->insn_off`` and
 kernel API, the ``insn_off`` is the instruction offset in the unit of ``struct
 bpf_insn``. For ELF API, the ``insn_off`` is the byte offset from the
 beginning of section (``btf_ext_info_sec->sec_name_off``).
+
+4.2 .BTF_ids section
+====================
+
+The .BTF_ids section encodes BTF ID values that are used within the kernel.
+
+This section is created during the kernel compilation with the help of
+macros defined in ``include/linux/btf_ids.h`` header file. Kernel code can
+use them to create lists and sets (sorted lists) of BTF ID values.
+
+The ``BTF_ID_LIST`` and ``BTF_ID`` macros define unsorted list of BTF ID values,
+with following syntax::
+
+  BTF_ID_LIST(list)
+  BTF_ID(type1, name1)
+  BTF_ID(type2, name2)
+
+resulting in following layout in .BTF_ids section::
+
+  __BTF_ID__type1__name1__1:
+  .zero 4
+  __BTF_ID__type2__name2__2:
+  .zero 4
+
+The ``u32 list[];`` variable is defined to access the list.
+
+The ``BTF_ID_UNUSED`` macro defines 4 zero bytes. It's used when we
+want to define unused entry in BTF_ID_LIST, like::
+
+      BTF_ID_LIST(bpf_skb_output_btf_ids)
+      BTF_ID(struct, sk_buff)
+      BTF_ID_UNUSED
+      BTF_ID(struct, task_struct)
+
+The ``BTF_SET_START/END`` macros pair defines sorted list of BTF ID values
+and their count, with following syntax::
+
+  BTF_SET_START(set)
+  BTF_ID(type1, name1)
+  BTF_ID(type2, name2)
+  BTF_SET_END(set)
+
+resulting in following layout in .BTF_ids section::
+
+  __BTF_ID__set__set:
+  .zero 4
+  __BTF_ID__type1__name1__3:
+  .zero 4
+  __BTF_ID__type2__name2__4:
+  .zero 4
+
+The ``struct btf_id_set set;`` variable is defined to access the list.
+
+The ``typeX`` name can be one of following::
+
+   struct, union, typedef, func
+
+and is used as a filter when resolving the BTF ID value.
+
+All the BTF ID lists and sets are compiled in the .BTF_ids section and
+resolved during the linking phase of kernel build by ``resolve_btfids`` tool.
 
 5. Using BTF
 ************

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  *  Copyright (C) 1994-1998   Linus Torvalds & authors (see below)
  *  Copyright (C) 2005, 2007  Bartlomiej Zolnierkiewicz
@@ -142,7 +143,7 @@ static void ide_classify_atapi_dev(ide_drive_t *drive)
 		}
 		/* Early cdrom models used zero */
 		type = ide_cdrom;
-		/* fall through */
+		fallthrough;
 	case ide_cdrom:
 		drive->dev_flags |= IDE_DFLAG_REMOVABLE;
 #ifdef CONFIG_PPC
@@ -1436,6 +1437,9 @@ int ide_host_register(struct ide_host *host, const struct ide_port_info *d,
 {
 	ide_hwif_t *hwif, *mate = NULL;
 	int i, j = 0;
+
+	pr_warn("legacy IDE will be removed in 2021, please switch to libata\n"
+		"Report any missing HW support to linux-ide@vger.kernel.org\n");
 
 	ide_host_for_each_port(i, hwif, host) {
 		if (hwif == NULL) {

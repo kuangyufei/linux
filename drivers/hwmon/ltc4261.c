@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * Driver for Linear Technology LTC4261 I2C Negative Voltage Hot Swap Controller
  *
@@ -9,20 +10,6 @@
  *  Copyright (C) 2008 Ira W. Snyder <iws@ovro.caltech.edu>
  *
  * Datasheet: http://cds.linear.com/docs/Datasheet/42612fb.pdf
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  */
 
 #include <linux/kernel.h>
@@ -203,8 +190,7 @@ static struct attribute *ltc4261_attrs[] = {
 };
 ATTRIBUTE_GROUPS(ltc4261);
 
-static int ltc4261_probe(struct i2c_client *client,
-			 const struct i2c_device_id *id)
+static int ltc4261_probe(struct i2c_client *client)
 {
 	struct i2c_adapter *adapter = client->adapter;
 	struct device *dev = &client->dev;
@@ -247,7 +233,7 @@ static struct i2c_driver ltc4261_driver = {
 	.driver = {
 		   .name = "ltc4261",
 		   },
-	.probe = ltc4261_probe,
+	.probe_new = ltc4261_probe,
 	.id_table = ltc4261_id,
 };
 

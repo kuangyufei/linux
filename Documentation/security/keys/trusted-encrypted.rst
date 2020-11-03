@@ -39,10 +39,9 @@ With the IBM TSS 2 stack::
 
 Or with the Intel TSS 2 stack::
 
-  #> tpm2_createprimary --hierarchy o -G rsa2048 -o key.ctxt
+  #> tpm2_createprimary --hierarchy o -G rsa2048 -c key.ctxt
   [...]
-  handle: 0x800000FF
-  #> tpm2_evictcontrol -c key.ctxt -p 0x81000001
+  #> tpm2_evictcontrol -c key.ctxt 0x81000001
   persistentHandle: 0x81000001
 
 Usage::
@@ -107,11 +106,13 @@ Where::
 
 Examples of trusted and encrypted key usage:
 
-Create and save a trusted key named "kmk" of length 32 bytes::
+Create and save a trusted key named "kmk" of length 32 bytes.
 
 Note: When using a TPM 2.0 with a persistent key with handle 0x81000001,
 append 'keyhandle=0x81000001' to statements between quotes, such as
 "new 32 keyhandle=0x81000001".
+
+::
 
     $ keyctl add trusted kmk "new 32" @u
     440502848
@@ -198,7 +199,7 @@ Load an encrypted key "evm" from saved blob::
     24717c64 5972dcb82ab2dde83376d82b2e3c09ffc
 
 Other uses for trusted and encrypted keys, such as for disk and file encryption
-are anticipated.  In particular the new format 'ecryptfs' has been defined in
+are anticipated.  In particular the new format 'ecryptfs' has been defined
 in order to use encrypted keys to mount an eCryptfs filesystem.  More details
 about the usage can be found in the file
 ``Documentation/security/keys/ecryptfs.rst``.

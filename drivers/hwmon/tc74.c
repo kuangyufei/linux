@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * An hwmon driver for the Microchip TC74
  *
@@ -7,11 +8,6 @@
  *	Copyright 2006 Stefan Roese, DENX Software Engineering
  *	Copyright 2008 Sean MacLennan, PIKA Technologies
  *	Copyright 2008 Frank Edelhaeuser, Spansion Inc.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
  */
 
 #include <linux/bitops.h>
@@ -107,8 +103,7 @@ static struct attribute *tc74_attrs[] = {
 
 ATTRIBUTE_GROUPS(tc74);
 
-static int tc74_probe(struct i2c_client *client,
-		      const struct i2c_device_id *dev_id)
+static int tc74_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
 	struct tc74_data *data;
@@ -165,7 +160,7 @@ static struct i2c_driver tc74_driver = {
 	.driver = {
 		.name	= "tc74",
 	},
-	.probe	= tc74_probe,
+	.probe_new = tc74_probe,
 	.id_table = tc74_id,
 };
 

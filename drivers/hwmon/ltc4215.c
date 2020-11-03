@@ -1,11 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * Driver for Linear Technology LTC4215 I2C Hot Swap Controller
  *
  * Copyright (C) 2009 Ira W. Snyder <iws@ovro.caltech.edu>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; version 2 of the License.
  *
  * Datasheet:
  * http://www.linear.com/pc/downloadDocument.do?navId=H0,C1,C1003,C1006,C1163,P17572,D12697
@@ -221,8 +218,7 @@ static struct attribute *ltc4215_attrs[] = {
 };
 ATTRIBUTE_GROUPS(ltc4215);
 
-static int ltc4215_probe(struct i2c_client *client,
-			 const struct i2c_device_id *id)
+static int ltc4215_probe(struct i2c_client *client)
 {
 	struct i2c_adapter *adapter = client->adapter;
 	struct device *dev = &client->dev;
@@ -259,7 +255,7 @@ static struct i2c_driver ltc4215_driver = {
 	.driver = {
 		.name	= "ltc4215",
 	},
-	.probe		= ltc4215_probe,
+	.probe_new	= ltc4215_probe,
 	.id_table	= ltc4215_id,
 };
 

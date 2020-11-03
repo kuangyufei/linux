@@ -5,10 +5,10 @@
 #include "tests.h"
 #include "debug.h"
 
-static int perf_evsel__test_field(struct perf_evsel *evsel, const char *name,
+static int perf_evsel__test_field(struct evsel *evsel, const char *name,
 				  int size, bool should_be_signed)
 {
-	struct tep_format_field *field = perf_evsel__field(evsel, name);
+	struct tep_format_field *field = evsel__field(evsel, name);
 	int is_signed;
 	int ret = 0;
 
@@ -35,11 +35,11 @@ static int perf_evsel__test_field(struct perf_evsel *evsel, const char *name,
 
 int test__perf_evsel__tp_sched_test(struct test *test __maybe_unused, int subtest __maybe_unused)
 {
-	struct perf_evsel *evsel = perf_evsel__newtp("sched", "sched_switch");
+	struct evsel *evsel = evsel__newtp("sched", "sched_switch");
 	int ret = 0;
 
 	if (IS_ERR(evsel)) {
-		pr_debug("perf_evsel__newtp failed with %ld\n", PTR_ERR(evsel));
+		pr_debug("evsel__newtp failed with %ld\n", PTR_ERR(evsel));
 		return -1;
 	}
 
@@ -64,12 +64,12 @@ int test__perf_evsel__tp_sched_test(struct test *test __maybe_unused, int subtes
 	if (perf_evsel__test_field(evsel, "next_prio", 4, true))
 		ret = -1;
 
-	perf_evsel__delete(evsel);
+	evsel__delete(evsel);
 
-	evsel = perf_evsel__newtp("sched", "sched_wakeup");
+	evsel = evsel__newtp("sched", "sched_wakeup");
 
 	if (IS_ERR(evsel)) {
-		pr_debug("perf_evsel__newtp failed with %ld\n", PTR_ERR(evsel));
+		pr_debug("evsel__newtp failed with %ld\n", PTR_ERR(evsel));
 		return -1;
 	}
 
@@ -85,5 +85,6 @@ int test__perf_evsel__tp_sched_test(struct test *test __maybe_unused, int subtes
 	if (perf_evsel__test_field(evsel, "target_cpu", 4, true))
 		ret = -1;
 
+	evsel__delete(evsel);
 	return ret;
 }

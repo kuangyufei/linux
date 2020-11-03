@@ -1,10 +1,7 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /* (C) 1999-2001 Paul `Rusty' Russell
  * (C) 2002-2006 Netfilter Core Team <coreteam@netfilter.org>
  * (C) 2011 Patrick McHardy <kaber@trash.net>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
  */
 
 #include <linux/module.h>
@@ -116,16 +113,22 @@ static int __net_init iptable_nat_table_init(struct net *net)
 	return ret;
 }
 
+static void __net_exit iptable_nat_net_pre_exit(struct net *net)
+{
+	if (net->ipv4.nat_table)
+		ipt_nat_unregister_lookups(net);
+}
+
 static void __net_exit iptable_nat_net_exit(struct net *net)
 {
 	if (!net->ipv4.nat_table)
 		return;
-	ipt_nat_unregister_lookups(net);
-	ipt_unregister_table(net, net->ipv4.nat_table, NULL);
+	ipt_unregister_table_exit(net, net->ipv4.nat_table);
 	net->ipv4.nat_table = NULL;
 }
 
 static struct pernet_operations iptable_nat_net_ops = {
+	.pre_exit = iptable_nat_net_pre_exit,
 	.exit	= iptable_nat_net_exit,
 };
 

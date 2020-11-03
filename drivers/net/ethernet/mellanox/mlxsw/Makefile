@@ -21,6 +21,7 @@ mlxsw_spectrum-objs		:= spectrum.o spectrum_buffers.o \
 				   spectrum_acl_atcam.o spectrum_acl_erp.o \
 				   spectrum1_acl_tcam.o spectrum2_acl_tcam.o \
 				   spectrum_acl_bloom_filter.o spectrum_acl.o \
+				   spectrum_flow.o spectrum_matchall.o \
 				   spectrum_flower.o spectrum_cnt.o \
 				   spectrum_fid.o spectrum_ipip.o \
 				   spectrum_acl_flex_actions.o \
@@ -28,8 +29,10 @@ mlxsw_spectrum-objs		:= spectrum.o spectrum_buffers.o \
 				   spectrum1_mr_tcam.o spectrum2_mr_tcam.o \
 				   spectrum_mr_tcam.o spectrum_mr.o \
 				   spectrum_qdisc.o spectrum_span.o \
-				   spectrum_nve.o spectrum_nve_vxlan.o
+				   spectrum_nve.o spectrum_nve_vxlan.o \
+				   spectrum_dpipe.o spectrum_trap.o \
+				   spectrum_ethtool.o spectrum_policer.o
 mlxsw_spectrum-$(CONFIG_MLXSW_SPECTRUM_DCB)	+= spectrum_dcb.o
-mlxsw_spectrum-$(CONFIG_NET_DEVLINK) += spectrum_dpipe.o
+mlxsw_spectrum-$(CONFIG_PTP_1588_CLOCK)		+= spectrum_ptp.o
 obj-$(CONFIG_MLXSW_MINIMAL)	+= mlxsw_minimal.o
 mlxsw_minimal-objs		:= minimal.o

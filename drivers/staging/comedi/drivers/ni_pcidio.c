@@ -33,7 +33,7 @@
  * The PCI-6534 requires a firmware upload after power-up to work, the
  * firmware data and instructions for loading it with comedi_config
  * it are contained in the comedi_nonfree_firmware tarball available from
- * http://www.comedi.org
+ * https://www.comedi.org
  */
 
 #define USE_DMA
@@ -310,7 +310,6 @@ static int ni_pcidio_request_di_mite_channel(struct comedi_device *dev)
 	writeb(primary_DMAChannel_bits(devpriv->di_mite_chan->channel) |
 	       secondary_DMAChannel_bits(devpriv->di_mite_chan->channel),
 	       dev->mmio + DMA_LINE_CONTROL_GROUP1);
-	mmiowb();
 	spin_unlock_irqrestore(&devpriv->mite_channel_lock, flags);
 	return 0;
 }
@@ -327,7 +326,6 @@ static void ni_pcidio_release_di_mite_channel(struct comedi_device *dev)
 		writeb(primary_DMAChannel_bits(0) |
 		       secondary_DMAChannel_bits(0),
 		       dev->mmio + DMA_LINE_CONTROL_GROUP1);
-		mmiowb();
 	}
 	spin_unlock_irqrestore(&devpriv->mite_channel_lock, flags);
 }
@@ -1007,6 +1005,6 @@ static struct pci_driver ni_pcidio_pci_driver = {
 };
 module_comedi_pci_driver(ni_pcidio_driver, ni_pcidio_pci_driver);
 
-MODULE_AUTHOR("Comedi http://www.comedi.org");
+MODULE_AUTHOR("Comedi https://www.comedi.org");
 MODULE_DESCRIPTION("Comedi low-level driver");
 MODULE_LICENSE("GPL");

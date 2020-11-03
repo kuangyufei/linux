@@ -1,13 +1,7 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
 #ifndef _ASM_POWERPC_MACHDEP_H
 #define _ASM_POWERPC_MACHDEP_H
 #ifdef __KERNEL__
-
-/*
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version
- * 2 of the License, or (at your option) any later version.
- */
 
 #include <linux/seq_file.h>
 #include <linux/init.h>
@@ -34,10 +28,6 @@ struct pci_host_bridge;
 struct machdep_calls {
 	char		*name;
 #ifdef CONFIG_PPC64
-	void __iomem *	(*ioremap)(phys_addr_t addr, unsigned long size,
-				   pgprot_t prot, void *caller);
-	void		(*iounmap)(volatile void __iomem *token);
-
 #ifdef CONFIG_PM
 	void		(*iommu_save)(void);
 	void		(*iommu_restore)(void);
@@ -75,7 +65,6 @@ struct machdep_calls {
 	void __noreturn	(*restart)(char *cmd);
 	void __noreturn (*halt)(void);
 	void		(*panic)(char *str);
-	void		(*cpu_die)(void);
 
 	long		(*time_init)(void); /* Optional, may be NULL */
 
@@ -141,7 +130,7 @@ struct machdep_calls {
 				    unsigned long dabrx);
 
 	/* Set DAWR for this platform, leave empty for default implementation */
-	int		(*set_dawr)(unsigned long dawr,
+	int		(*set_dawr)(int nr, unsigned long dawr,
 				    unsigned long dawrx);
 
 #ifdef CONFIG_PPC32	/* XXX for now */
@@ -232,8 +221,6 @@ struct machdep_calls {
 
 extern void e500_idle(void);
 extern void power4_idle(void);
-extern void power7_idle(void);
-extern void power9_idle(void);
 extern void ppc6xx_idle(void);
 extern void book3e_idle(void);
 
@@ -245,7 +232,7 @@ extern void book3e_idle(void);
 extern struct machdep_calls ppc_md;
 extern struct machdep_calls *machine_id;
 
-#define __machine_desc __attribute__ ((__section__ (".machine.desc")))
+#define __machine_desc __section(".machine.desc")
 
 #define define_machine(name)					\
 	extern struct machdep_calls mach_##name;		\

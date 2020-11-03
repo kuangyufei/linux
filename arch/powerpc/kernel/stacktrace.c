@@ -57,7 +57,7 @@ void save_stack_trace(struct stack_trace *trace)
 {
 	unsigned long sp;
 
-	sp = current_stack_pointer();
+	sp = current_stack_frame();
 
 	save_context_stack(trace, sp, current, 1);
 }
@@ -71,7 +71,7 @@ void save_stack_trace_tsk(struct task_struct *tsk, struct stack_trace *trace)
 		return;
 
 	if (tsk == current)
-		sp = current_stack_pointer();
+		sp = current_stack_frame();
 	else
 		sp = tsk->thread.ksp;
 
@@ -131,7 +131,7 @@ static int __save_stack_trace_tsk_reliable(struct task_struct *tsk,
 	}
 
 	if (tsk == current)
-		sp = current_stack_pointer();
+		sp = current_stack_frame();
 	else
 		sp = tsk->thread.ksp;
 
@@ -182,7 +182,7 @@ static int __save_stack_trace_tsk_reliable(struct task_struct *tsk,
 		 * FIXME: IMHO these tests do not belong in
 		 * arch-dependent code, they are generic.
 		 */
-		ip = ftrace_graph_ret_addr(tsk, &graph_idx, ip, NULL);
+		ip = ftrace_graph_ret_addr(tsk, &graph_idx, ip, stack);
 #ifdef CONFIG_KPROBES
 		/*
 		 * Mark stacktraces with kretprobed functions on them
@@ -260,7 +260,7 @@ static void raise_backtrace_ipi(cpumask_t *mask)
 			pr_cont(" current pointer corrupt? (%px)\n", p->__current);
 
 		pr_warn("Back trace of paca->saved_r1 (0x%016llx) (possibly stale):\n", p->saved_r1);
-		show_stack(p->__current, (unsigned long *)p->saved_r1);
+		show_stack(p->__current, (unsigned long *)p->saved_r1, KERN_WARNING);
 	}
 }
 

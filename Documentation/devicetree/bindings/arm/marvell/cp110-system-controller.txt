@@ -78,8 +78,8 @@ Documentation/devicetree/bindings/pinctrl/marvell,mvebu-pinctrl.txt.
 
 Required properties:
 
-- compatible: "marvell,armada-7k-pinctrl",
-  "marvell,armada-8k-cpm-pinctrl" or "marvell,armada-8k-cps-pinctrl"
+- compatible: "marvell,armada-7k-pinctrl", "marvell,armada-8k-cpm-pinctrl",
+  "marvell,armada-8k-cps-pinctrl" or "marvell,cp115-standalone-pinctrl"
   depending on the specific variant of the SoC being used.
 
 Available mpp pins/groups and functions:
@@ -203,7 +203,7 @@ It is possible to setup an overheat interrupt by giving at least one
 critical point to any subnode of the thermal-zone node.
 
 For common binding part and usage, refer to
-Documentation/devicetree/bindings/thermal/thermal.txt
+Documentation/devicetree/bindings/thermal/thermal*.yaml
 
 Required properties:
 - compatible: must be one of:

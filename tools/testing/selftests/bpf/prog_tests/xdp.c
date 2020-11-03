@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 #include <test_progs.h>
+#include <network_helpers.h>
 
 void test_xdp(void)
 {
@@ -16,10 +17,8 @@ void test_xdp(void)
 	int err, prog_fd, map_fd;
 
 	err = bpf_prog_load(file, BPF_PROG_TYPE_XDP, &obj, &prog_fd);
-	if (err) {
-		error_cnt++;
+	if (CHECK_FAIL(err))
 		return;
-	}
 
 	map_fd = bpf_find_map(__func__, obj, "vip2tnl");
 	if (map_fd < 0)

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * lm92 - Hardware monitoring driver
  * Copyright (C) 2005-2008  Jean Delvare <jdelvare@suse.de>
@@ -24,16 +25,6 @@
  * Support could easily be added for the National Semiconductor LM76
  * and Maxim MAX6633 and MAX6634 chips, which are mostly compatible
  * with the LM92.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  */
 
 #include <linux/module.h>
@@ -301,8 +292,7 @@ static int lm92_detect(struct i2c_client *new_client,
 	return 0;
 }
 
-static int lm92_probe(struct i2c_client *new_client,
-		      const struct i2c_device_id *id)
+static int lm92_probe(struct i2c_client *new_client)
 {
 	struct device *hwmon_dev;
 	struct lm92_data *data;
@@ -340,7 +330,7 @@ static struct i2c_driver lm92_driver = {
 	.driver = {
 		.name	= "lm92",
 	},
-	.probe		= lm92_probe,
+	.probe_new	= lm92_probe,
 	.id_table	= lm92_id,
 	.detect		= lm92_detect,
 	.address_list	= normal_i2c,

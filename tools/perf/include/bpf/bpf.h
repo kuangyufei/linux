@@ -24,7 +24,13 @@ struct bpf_map SEC("maps") name = {				\
 	.key_size    = sizeof(type_key),			\
 	.value_size  = sizeof(type_val),			\
 	.max_entries = _max_entries,				\
-}
+};								\
+struct ____btf_map_##name {					\
+	type_key key;						\
+	type_val value;                                 	\
+};								\
+struct ____btf_map_##name __attribute__((section(".maps." #name), used)) \
+	____btf_map_##name = { }
 
 /*
  * FIXME: this should receive .max_entries as a parameter, as careful
@@ -38,6 +44,8 @@ struct bpf_map SEC("maps") name = {				\
 
 static int (*bpf_map_update_elem)(struct bpf_map *map, void *key, void *value, u64 flags) = (void *)BPF_FUNC_map_update_elem;
 static void *(*bpf_map_lookup_elem)(struct bpf_map *map, void *key) = (void *)BPF_FUNC_map_lookup_elem;
+
+static void (*bpf_tail_call)(void *ctx, void *map, int index) = (void *)BPF_FUNC_tail_call;
 
 #define SEC(NAME) __attribute__((section(NAME),  used))
 

@@ -22,6 +22,10 @@
  * Authors: AMD
  *
  */
+
+#include "dc_features.h"
+#include "display_mode_enums.h"
+
 #ifndef __DISPLAY_MODE_STRUCTS_H__
 #define __DISPLAY_MODE_STRUCTS_H__
 
@@ -55,14 +59,19 @@ struct _vcs_dpi_voltage_scaling_st {
 	double dscclk_mhz;
 	double dcfclk_mhz;
 	double socclk_mhz;
+	double phyclk_d18_mhz;
 	double dram_speed_mts;
 	double fabricclk_mhz;
 	double dispclk_mhz;
+	double dram_bw_per_chan_gbps;
 	double phyclk_mhz;
 	double dppclk_mhz;
+	double dtbclk_mhz;
 };
 
 struct _vcs_dpi_soc_bounding_box_st {
+	struct _vcs_dpi_voltage_scaling_st clock_limits[DC__VOLTAGE_STATES];
+	unsigned int num_states;
 	double sr_exit_time_us;
 	double sr_enter_plus_exit_time_us;
 	double urgent_latency_us;
@@ -74,6 +83,7 @@ struct _vcs_dpi_soc_bounding_box_st {
 	double pct_ideal_dram_sdp_bw_after_urgent_pixel_only; // PercentOfIdealDRAMFabricAndSDPPortBWReceivedAfterUrgLatencyPixelDataOnly
 	double pct_ideal_dram_sdp_bw_after_urgent_pixel_and_vm;
 	double pct_ideal_dram_sdp_bw_after_urgent_vm_only;
+	double pct_ideal_sdp_bw_after_urgent;
 	double max_avg_sdp_bw_use_normal_percent;
 	double max_avg_dram_bw_use_normal_percent;
 	unsigned int max_request_size_bytes;
@@ -95,20 +105,33 @@ struct _vcs_dpi_soc_bounding_box_st {
 	unsigned int num_banks;
 	unsigned int num_chans;
 	unsigned int vmm_page_size_bytes;
+	unsigned int hostvm_min_page_size_bytes;
+	unsigned int gpuvm_min_page_size_bytes;
 	double dram_clock_change_latency_us;
+	double dummy_pstate_latency_us;
 	double writeback_dram_clock_change_latency_us;
 	unsigned int return_bus_width_bytes;
 	unsigned int voltage_override;
 	double xfc_bus_transport_time_us;
 	double xfc_xbuf_latency_tolerance_us;
 	int use_urgent_burst_bw;
-	unsigned int num_states;
-	struct _vcs_dpi_voltage_scaling_st clock_limits[8];
+	double min_dcfclk;
+	bool do_urgent_latency_adjustment;
+	double urgent_latency_adjustment_fabric_clock_component_us;
+	double urgent_latency_adjustment_fabric_clock_reference_mhz;
+	bool disable_dram_clock_change_vactive_support;
+	bool allow_dram_clock_one_display_vactive;
+	enum self_refresh_affinity allow_dram_self_refresh_or_dram_clock_change_in_vblank;
 };
 
 struct _vcs_dpi_ip_params_st {
+	bool use_min_dcfclk;
+#ifdef CONFIG_DRM_AMD_DC_DCN3_0
+	bool clamp_min_dcfclk;
+#endif
 	bool gpuvm_enable;
 	bool hostvm_enable;
+	bool dsc422_native_support;
 	unsigned int gpuvm_max_page_table_levels;
 	unsigned int hostvm_max_page_table_levels;
 	unsigned int hostvm_cached_page_table_levels;
@@ -127,12 +150,28 @@ struct _vcs_dpi_ip_params_st {
 	unsigned char pte_enable;
 	unsigned int pte_chunk_size_kbytes;
 	unsigned int meta_chunk_size_kbytes;
+	unsigned int min_meta_chunk_size_bytes;
 	unsigned int writeback_chunk_size_kbytes;
 	unsigned int line_buffer_size_bits;
 	unsigned int max_line_buffer_lines;
 	unsigned int writeback_luma_buffer_size_kbytes;
 	unsigned int writeback_chroma_buffer_size_kbytes;
 	unsigned int writeback_chroma_line_buffer_width_pixels;
+
+	unsigned int writeback_interface_buffer_size_kbytes;
+	unsigned int writeback_line_buffer_buffer_size;
+
+	unsigned int writeback_10bpc420_supported;
+	double writeback_max_hscl_ratio;
+	double writeback_max_vscl_ratio;
+	double writeback_min_hscl_ratio;
+	double writeback_min_vscl_ratio;
+	double maximum_dsc_bits_per_component;
+	unsigned int writeback_max_hscl_taps;
+	unsigned int writeback_max_vscl_taps;
+	unsigned int writeback_line_buffer_luma_buffer_size;
+	unsigned int writeback_line_buffer_chroma_buffer_size;
+
 	unsigned int max_page_table_levels;
 	unsigned int max_num_dpp;
 	unsigned int max_num_otg;
@@ -150,6 +189,13 @@ struct _vcs_dpi_ip_params_st {
 	unsigned int max_hscl_taps;
 	unsigned int max_vscl_taps;
 	unsigned int xfc_supported;
+	unsigned int ptoi_supported;
+	unsigned int gfx7_compat_tiling_supported;
+
+	bool odm_combine_4to1_supported;
+	bool dynamic_metadata_vm_enabled;
+	unsigned int max_num_hdmi_frl_outputs;
+
 	unsigned int xfc_fill_constant_bytes;
 	double dispclk_ramp_margin_percent;
 	double xfc_fill_bw_overhead_percent;
@@ -157,7 +203,7 @@ struct _vcs_dpi_ip_params_st {
 	unsigned int min_vblank_lines;
 	unsigned int dppclk_delay_subtotal;
 	unsigned int dispclk_delay_subtotal;
-	unsigned int dcfclk_cstate_latency;
+	double dcfclk_cstate_latency;
 	unsigned int dppclk_delay_scl;
 	unsigned int dppclk_delay_scl_lb_only;
 	unsigned int dppclk_delay_cnvc_formatter;
@@ -170,6 +216,7 @@ struct _vcs_dpi_ip_params_st {
 	unsigned int LineBufferFixedBpp;
 	unsigned int can_vstartup_lines_exceed_vsync_plus_back_porch_lines_minus_one;
 	unsigned int bug_forcing_LC_req_same_size_fixed;
+	unsigned int number_of_cursors;
 };
 
 struct _vcs_dpi_display_xfc_params_st {
@@ -181,10 +228,14 @@ struct _vcs_dpi_display_xfc_params_st {
 
 struct _vcs_dpi_display_pipe_source_params_st {
 	int source_format;
+	double dcc_fraction_of_zs_req_luma;
+	double dcc_fraction_of_zs_req_chroma;
 	unsigned char dcc;
 	unsigned int dcc_rate;
+	unsigned int dcc_rate_chroma;
 	unsigned char dcc_use_global;
 	unsigned char vm;
+	bool unbounded_req_mode;
 	bool gpuvm;    // gpuvm enabled
 	bool hostvm;    // hostvm enabled
 	bool gpuvm_levels_force_en;
@@ -194,6 +245,10 @@ struct _vcs_dpi_display_pipe_source_params_st {
 	int source_scan;
 	int sw_mode;
 	int macro_tile_size;
+	unsigned int surface_width_y;
+	unsigned int surface_height_y;
+	unsigned int surface_width_c;
+	unsigned int surface_height_c;
 	unsigned int viewport_width;
 	unsigned int viewport_height;
 	unsigned int viewport_y_y;
@@ -216,10 +271,15 @@ struct _vcs_dpi_display_pipe_source_params_st {
 	unsigned int hsplit_grp;
 	unsigned char xfc_enable;
 	unsigned char xfc_slave;
+	unsigned char immediate_flip;
 	struct _vcs_dpi_display_xfc_params_st xfc_params;
+	//for vstartuplines calculation freesync
+	unsigned char v_total_min;
+	unsigned char v_total_max;
 };
 struct writeback_st {
 	int wb_src_height;
+	int wb_src_width;
 	int wb_dst_width;
 	int wb_dst_height;
 	int wb_pixel_format;
@@ -233,7 +293,7 @@ struct writeback_st {
 
 struct _vcs_dpi_display_output_params_st {
 	int dp_lanes;
-	int output_bpp;
+	double output_bpp;
 	int dsc_enable;
 	int wb_enable;
 	int num_active_wb;
@@ -241,6 +301,7 @@ struct _vcs_dpi_display_output_params_st {
 	int output_type;
 	int output_format;
 	int dsc_slices;
+	int max_audio_sample_rate;
 	struct writeback_st wb;
 };
 
@@ -275,6 +336,8 @@ struct _vcs_dpi_display_pipe_dest_params_st {
 	unsigned int vblank_end;
 	unsigned int htotal;
 	unsigned int vtotal;
+	unsigned int refresh_rate;
+	unsigned int vfront_porch;
 	unsigned int vactive;
 	unsigned int hactive;
 	unsigned int vstartup_start;
@@ -284,9 +347,12 @@ struct _vcs_dpi_display_pipe_dest_params_st {
 	unsigned char interlaced;
 	double pixel_rate_mhz;
 	unsigned char synchronized_vblank_all_planes;
+	unsigned char synchronize_timing_if_single_refresh_rate;
 	unsigned char otg_inst;
-	unsigned char odm_combine;
+	unsigned int odm_combine;
 	unsigned char use_maximum_vstartup;
+	unsigned int vtotal_max;
+	unsigned int vtotal_min;
 };
 
 struct _vcs_dpi_display_pipe_params_st {
@@ -362,6 +428,7 @@ struct _vcs_dpi_display_rq_misc_params_st {
 struct _vcs_dpi_display_rq_params_st {
 	unsigned char yuv420;
 	unsigned char yuv420_10bpc;
+	unsigned char rgbe_alpha;
 	display_rq_misc_params_st misc;
 	display_rq_sizing_params_st sizing;
 	display_rq_dlg_params_st dlg;
@@ -416,6 +483,8 @@ struct _vcs_dpi_display_dlg_regs_st {
 	unsigned int refcyc_per_vm_group_flip;
 	unsigned int refcyc_per_vm_req_vblank;
 	unsigned int refcyc_per_vm_req_flip;
+	unsigned int refcyc_per_vm_dmdata;
+	unsigned int dmdata_dl_delta;
 };
 
 struct _vcs_dpi_display_ttu_regs_st {

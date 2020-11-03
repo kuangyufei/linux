@@ -1,12 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * rt298.c  --  RT298 ALSA SoC audio codec driver
  *
  * Copyright 2015 Realtek Semiconductor Corp.
  * Author: Bard Liao <bardliao@realtek.com>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
  */
 
 #include <linux/module.h>
@@ -511,7 +508,7 @@ static int rt298_adc_event(struct snd_soc_dapm_widget *w,
 			VERB_CMD(AC_VERB_SET_AMP_GAIN_MUTE, nid, 0),
 			0x7080, 0x7000);
 		 /* If MCLK doesn't exist, reset AD filter */
-		if (!(snd_soc_component_read32(component, RT298_VAD_CTRL) & 0x200)) {
+		if (!(snd_soc_component_read(component, RT298_VAD_CTRL) & 0x200)) {
 			pr_info("NO MCLK\n");
 			switch (nid) {
 			case RT298_ADC_IN1:
@@ -1148,11 +1145,13 @@ static const struct i2c_device_id rt298_i2c_id[] = {
 };
 MODULE_DEVICE_TABLE(i2c, rt298_i2c_id);
 
+#ifdef CONFIG_ACPI
 static const struct acpi_device_id rt298_acpi_match[] = {
 	{ "INT343A", 0 },
 	{},
 };
 MODULE_DEVICE_TABLE(acpi, rt298_acpi_match);
+#endif
 
 static const struct dmi_system_id force_combo_jack_table[] = {
 	{

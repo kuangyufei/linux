@@ -1,22 +1,19 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * DA8XX/OMAP L1XX platform device data
  *
  * Copyright (c) 2007-2009, MontaVista Software, Inc. <source@mvista.com>
  * Derived from code that was:
  *	Copyright (C) 2006 Komal Shah <komal_shah802003@yahoo.com>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
  */
 #include <linux/ahci_platform.h>
 #include <linux/clk-provider.h>
 #include <linux/clk.h>
 #include <linux/clkdev.h>
-#include <linux/dma-contiguous.h>
+#include <linux/dma-map-ops.h>
 #include <linux/dmaengine.h>
 #include <linux/init.h>
+#include <linux/io.h>
 #include <linux/platform_device.h>
 #include <linux/reboot.h>
 #include <linux/serial_8250.h>
@@ -24,7 +21,6 @@
 #include <mach/common.h>
 #include <mach/cputype.h>
 #include <mach/da8xx.h>
-#include <mach/time.h>
 
 #include "asp.h"
 #include "cpuidle.h"
@@ -686,6 +682,9 @@ static struct platform_device da8xx_lcdc_device = {
 	.id		= 0,
 	.num_resources	= ARRAY_SIZE(da8xx_lcdc_resources),
 	.resource	= da8xx_lcdc_resources,
+	.dev		= {
+		.coherent_dma_mask	= DMA_BIT_MASK(32),
+	}
 };
 
 int __init da8xx_register_lcdc(struct da8xx_lcdc_platform_data *pdata)
@@ -885,6 +884,7 @@ early_param("rproc_mem", early_rproc_mem);
 
 void __init da8xx_rproc_reserve_cma(void)
 {
+	struct cma *cma;
 	int ret;
 
 	if (!rproc_base || !rproc_size) {
@@ -898,13 +898,16 @@ void __init da8xx_rproc_reserve_cma(void)
 	pr_info("%s: reserving 0x%lx @ 0x%lx...\n",
 		__func__, rproc_size, (unsigned long)rproc_base);
 
-	ret = dma_declare_contiguous(&da8xx_dsp.dev, rproc_size, rproc_base, 0);
-	if (ret)
-		pr_err("%s: dma_declare_contiguous failed %d\n", __func__, ret);
-	else
-		rproc_mem_inited = true;
+	ret = dma_contiguous_reserve_area(rproc_size, rproc_base, 0, &cma,
+			true);
+	if (ret) {
+		pr_err("%s: dma_contiguous_reserve_area failed %d\n",
+			__func__, ret);
+		return;
+	}
+	da8xx_dsp.dev.cma_area = cma;
+	rproc_mem_inited = true;
 }
-
 #else
 
 void __init da8xx_rproc_reserve_cma(void)

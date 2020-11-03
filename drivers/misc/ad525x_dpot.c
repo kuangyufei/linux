@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * ad525x_dpot: Driver for the Analog Devices digital potentiometers
  * Copyright (c) 2009-2010 Analog Devices, Inc.
@@ -57,7 +58,7 @@
  * AD5272		1		1024		20, 50, 100 (50-TP)
  * AD5274		1		256		20, 50, 100 (50-TP)
  *
- * See Documentation/misc-devices/ad525x_dpot.txt for more info.
+ * See Documentation/misc-devices/ad525x_dpot.rst for more info.
  *
  * derived from ad5258.c
  * Copyright (c) 2009 Cyber Switching, Inc.
@@ -65,8 +66,6 @@
  *
  * derived from ad5252.c
  * Copyright (c) 2006-2011 Michael Hennerich <michael.hennerich@analog.com>
- *
- * Licensed under the GPL-2 or later.
  */
 
 #include <linux/module.h>

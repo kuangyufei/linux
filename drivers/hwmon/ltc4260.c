@@ -1,17 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * Driver for Linear Technology LTC4260 I2C Positive Voltage Hot Swap Controller
  *
  * Copyright (c) 2014 Guenter Roeck
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  */
 
 #include <linux/kernel.h>
@@ -150,8 +141,7 @@ static const struct regmap_config ltc4260_regmap_config = {
 	.max_register = LTC4260_ADIN,
 };
 
-static int ltc4260_probe(struct i2c_client *client,
-			 const struct i2c_device_id *id)
+static int ltc4260_probe(struct i2c_client *client)
 {
 	struct device *dev = &client->dev;
 	struct device *hwmon_dev;
@@ -183,7 +173,7 @@ static struct i2c_driver ltc4260_driver = {
 	.driver = {
 		   .name = "ltc4260",
 		   },
-	.probe = ltc4260_probe,
+	.probe_new = ltc4260_probe,
 	.id_table = ltc4260_id,
 };
 

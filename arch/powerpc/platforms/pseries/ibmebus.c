@@ -40,13 +40,14 @@
 #include <linux/export.h>
 #include <linux/console.h>
 #include <linux/kobject.h>
-#include <linux/dma-mapping.h>
+#include <linux/dma-map-ops.h>
 #include <linux/interrupt.h>
 #include <linux/of.h>
 #include <linux/slab.h>
 #include <linux/stat.h>
 #include <linux/of_platform.h>
 #include <asm/ibmebus.h>
+#include <asm/machdep.h>
 
 static struct device ibmebus_bus_device = { /* fake "parent" device */
 	.init_name = "ibmebus",
@@ -147,13 +148,13 @@ static const struct dma_map_ops ibmebus_dma_ops = {
 	.unmap_page         = ibmebus_unmap_page,
 };
 
-static int ibmebus_match_path(struct device *dev, void *data)
+static int ibmebus_match_path(struct device *dev, const void *data)
 {
 	struct device_node *dn = to_platform_device(dev)->dev.of_node;
 	return (of_find_node_by_path(data) == dn);
 }
 
-static int ibmebus_match_node(struct device *dev, void *data)
+static int ibmebus_match_node(struct device *dev, const void *data)
 {
 	return to_platform_device(dev)->dev.of_node == data;
 }
@@ -464,4 +465,4 @@ static int __init ibmebus_bus_init(void)
 
 	return 0;
 }
-postcore_initcall(ibmebus_bus_init);
+machine_postcore_initcall(pseries, ibmebus_bus_init);

@@ -1,32 +1,16 @@
-/*
- * cros_ec_lightbar - expose the Chromebook Pixel lightbar to userspace
- *
- * Copyright (C) 2014 Google, Inc.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program. If not, see <http://www.gnu.org/licenses/>.
- */
-
-#define pr_fmt(fmt) "cros_ec_lightbar: " fmt
+// SPDX-License-Identifier: GPL-2.0+
+// Expose the Chromebook Pixel lightbar to userspace
+//
+// Copyright (C) 2014 Google, Inc.
 
 #include <linux/ctype.h>
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/fs.h>
 #include <linux/kobject.h>
-#include <linux/mfd/cros_ec.h>
-#include <linux/mfd/cros_ec_commands.h>
 #include <linux/module.h>
+#include <linux/platform_data/cros_ec_commands.h>
+#include <linux/platform_data/cros_ec_proto.h>
 #include <linux/platform_device.h>
 #include <linux/sched.h>
 #include <linux/types.h>
@@ -132,8 +116,10 @@ static int get_lightbar_version(struct cros_ec_dev *ec,
 
 	param = (struct ec_params_lightbar *)msg->data;
 	param->cmd = LIGHTBAR_CMD_VERSION;
-	ret = cros_ec_cmd_xfer(ec->ec_dev, msg);
-	if (ret < 0) {
+	msg->outsize = sizeof(param->cmd);
+	msg->result = sizeof(resp->version);
+	ret = cros_ec_cmd_xfer_status(ec->ec_dev, msg);
+	if (ret < 0 && ret != -EINVAL) {
 		ret = 0;
 		goto exit;
 	}
@@ -209,14 +195,9 @@ static ssize_t brightness_store(struct device *dev,
 	if (ret)
 		goto exit;
 
-	ret = cros_ec_cmd_xfer(ec->ec_dev, msg);
+	ret = cros_ec_cmd_xfer_status(ec->ec_dev, msg);
 	if (ret < 0)
 		goto exit;
-
-	if (msg->result != EC_RES_SUCCESS) {
-		ret = -EINVAL;
-		goto exit;
-	}
 
 	ret = count;
 exit:
@@ -274,11 +255,8 @@ static ssize_t led_rgb_store(struct device *dev, struct device_attribute *attr,
 					goto exit;
 			}
 
-			ret = cros_ec_cmd_xfer(ec->ec_dev, msg);
+			ret = cros_ec_cmd_xfer_status(ec->ec_dev, msg);
 			if (ret < 0)
-				goto exit;
-
-			if (msg->result != EC_RES_SUCCESS)
 				goto exit;
 
 			i = 0;
@@ -321,13 +299,10 @@ static ssize_t sequence_show(struct device *dev,
 	if (ret)
 		goto exit;
 
-	ret = cros_ec_cmd_xfer(ec->ec_dev, msg);
-	if (ret < 0)
-		goto exit;
-
-	if (msg->result != EC_RES_SUCCESS) {
-		ret = scnprintf(buf, PAGE_SIZE,
-				"ERROR: EC returned %d\n", msg->result);
+	ret = cros_ec_cmd_xfer_status(ec->ec_dev, msg);
+	if (ret < 0) {
+		ret = scnprintf(buf, PAGE_SIZE, "XFER / EC ERROR %d / %d\n",
+				ret, msg->result);
 		goto exit;
 	}
 
@@ -360,13 +335,10 @@ static int lb_send_empty_cmd(struct cros_ec_dev *ec, uint8_t cmd)
 	if (ret)
 		goto error;
 
-	ret = cros_ec_cmd_xfer(ec->ec_dev, msg);
+	ret = cros_ec_cmd_xfer_status(ec->ec_dev, msg);
 	if (ret < 0)
 		goto error;
-	if (msg->result != EC_RES_SUCCESS) {
-		ret = -EINVAL;
-		goto error;
-	}
+
 	ret = 0;
 error:
 	kfree(msg);
@@ -393,13 +365,10 @@ static int lb_manual_suspend_ctrl(struct cros_ec_dev *ec, uint8_t enable)
 	if (ret)
 		goto error;
 
-	ret = cros_ec_cmd_xfer(ec->ec_dev, msg);
+	ret = cros_ec_cmd_xfer_status(ec->ec_dev, msg);
 	if (ret < 0)
 		goto error;
-	if (msg->result != EC_RES_SUCCESS) {
-		ret = -EINVAL;
-		goto error;
-	}
+
 	ret = 0;
 error:
 	kfree(msg);
@@ -441,14 +410,9 @@ static ssize_t sequence_store(struct device *dev, struct device_attribute *attr,
 	if (ret)
 		goto exit;
 
-	ret = cros_ec_cmd_xfer(ec->ec_dev, msg);
+	ret = cros_ec_cmd_xfer_status(ec->ec_dev, msg);
 	if (ret < 0)
 		goto exit;
-
-	if (msg->result != EC_RES_SUCCESS) {
-		ret = -EINVAL;
-		goto exit;
-	}
 
 	ret = count;
 exit:
@@ -503,13 +467,9 @@ static ssize_t program_store(struct device *dev, struct device_attribute *attr,
 	 */
 	msg->outsize = count + extra_bytes;
 
-	ret = cros_ec_cmd_xfer(ec->ec_dev, msg);
+	ret = cros_ec_cmd_xfer_status(ec->ec_dev, msg);
 	if (ret < 0)
 		goto exit;
-	if (msg->result != EC_RES_SUCCESS) {
-		ret = -EINVAL;
-		goto exit;
-	}
 
 	ret = count;
 exit:
@@ -563,7 +523,7 @@ static struct attribute *__lb_cmds_attrs[] = {
 	NULL,
 };
 
-struct attribute_group cros_ec_lightbar_attr_group = {
+static struct attribute_group cros_ec_lightbar_attr_group = {
 	.name = "lightbar",
 	.attrs = __lb_cmds_attrs,
 };
@@ -616,7 +576,7 @@ static int cros_ec_lightbar_remove(struct platform_device *pd)
 
 static int __maybe_unused cros_ec_lightbar_resume(struct device *dev)
 {
-	struct cros_ec_dev *ec_dev = dev_get_drvdata(dev);
+	struct cros_ec_dev *ec_dev = dev_get_drvdata(dev->parent);
 
 	if (userspace_control)
 		return 0;
@@ -626,7 +586,7 @@ static int __maybe_unused cros_ec_lightbar_resume(struct device *dev)
 
 static int __maybe_unused cros_ec_lightbar_suspend(struct device *dev)
 {
-	struct cros_ec_dev *ec_dev = dev_get_drvdata(dev);
+	struct cros_ec_dev *ec_dev = dev_get_drvdata(dev->parent);
 
 	if (userspace_control)
 		return 0;

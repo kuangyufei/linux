@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-only
 #
 # IP netfilter configuration
 #
@@ -26,14 +27,6 @@ config NF_TABLES_IPV4
 	  This option enables the IPv4 support for nf_tables.
 
 if NF_TABLES_IPV4
-
-config NFT_CHAIN_ROUTE_IPV4
-	tristate "IPv4 nf_tables route chain support"
-	help
-	  This option enables the "route" chain for IPv4 in nf_tables. This
-	  chain type is used to force packet re-routing after mangling header
-	  fields such as the source, destination, type of service and
-	  the packet mark.
 
 config NFT_REJECT_IPV4
 	select NF_REJECT_IPV4
@@ -101,7 +94,7 @@ config NF_NAT_SNMP_BASIC
 	depends on NETFILTER_ADVANCED
 	default NF_NAT && NF_CONNTRACK_SNMP
 	select ASN1
-	---help---
+	help
 
 	  This module implements an Application Layer Gateway (ALG) for
 	  SNMP payloads.  In conjunction with NAT, it allows a network
@@ -153,7 +146,7 @@ config IP_NF_MATCH_ECN
 	tristate '"ecn" match support'
 	depends on NETFILTER_ADVANCED
 	select NETFILTER_XT_MATCH_ECN
-	---help---
+	help
 	This is a backwards-compat option for the user's convenience
 	(e.g. when running oldconfig). It selects
 	CONFIG_NETFILTER_XT_MATCH_ECN.
@@ -162,7 +155,7 @@ config IP_NF_MATCH_RPFILTER
 	tristate '"rpfilter" reverse path filter match support'
 	depends on NETFILTER_ADVANCED
 	depends on IP_NF_MANGLE || IP_NF_RAW
-	---help---
+	help
 	  This option allows you to match packets whose replies would
 	  go out via the interface the packet came in.
 
@@ -173,7 +166,7 @@ config IP_NF_MATCH_TTL
 	tristate '"ttl" match support'
 	depends on NETFILTER_ADVANCED
 	select NETFILTER_XT_MATCH_HL
-	---help---
+	help
 	This is a backwards-compat option for the user's convenience
 	(e.g. when running oldconfig). It selects
 	CONFIG_NETFILTER_XT_MATCH_HL.
@@ -232,22 +225,16 @@ if IP_NF_NAT
 
 config IP_NF_TARGET_MASQUERADE
 	tristate "MASQUERADE target support"
-	select NF_NAT_MASQUERADE
-	default m if NETFILTER_ADVANCED=n
+	select NETFILTER_XT_TARGET_MASQUERADE
 	help
-	  Masquerading is a special case of NAT: all outgoing connections are
-	  changed to seem to come from a particular interface's address, and
-	  if the interface goes down, those connections are lost.  This is
-	  only useful for dialup accounts with dynamic IP address (ie. your IP
-	  address will be different on next dialup).
-
-	  To compile it as a module, choose M here.  If unsure, say N.
+	  This is a backwards-compat option for the user's convenience
+	  (e.g. when running oldconfig). It selects NETFILTER_XT_TARGET_MASQUERADE.
 
 config IP_NF_TARGET_NETMAP
 	tristate "NETMAP target support"
 	depends on NETFILTER_ADVANCED
 	select NETFILTER_XT_TARGET_NETMAP
-	---help---
+	help
 	This is a backwards-compat option for the user's convenience
 	(e.g. when running oldconfig). It selects
 	CONFIG_NETFILTER_XT_TARGET_NETMAP.
@@ -256,7 +243,7 @@ config IP_NF_TARGET_REDIRECT
 	tristate "REDIRECT target support"
 	depends on NETFILTER_ADVANCED
 	select NETFILTER_XT_TARGET_REDIRECT
-	---help---
+	help
 	This is a backwards-compat option for the user's convenience
 	(e.g. when running oldconfig). It selects
 	CONFIG_NETFILTER_XT_TARGET_REDIRECT.
@@ -285,16 +272,16 @@ config IP_NF_TARGET_CLUSTERIP
 	  The CLUSTERIP target allows you to build load-balancing clusters of
 	  network servers without having a dedicated load-balancing
 	  router/server/switch.
-	
+
 	  To compile it as a module, choose M here.  If unsure, say N.
 
 config IP_NF_TARGET_ECN
 	tristate "ECN target support"
 	depends on IP_NF_MANGLE
 	depends on NETFILTER_ADVANCED
-	---help---
+	help
 	  This option adds a `ECN' target, which can be used in the iptables mangle
-	  table.  
+	  table.
 
 	  You can use this target to remove the ECN bits from the IPv4 header of
 	  an IP packet.  This is particularly useful, if you need to work around
@@ -307,7 +294,7 @@ config IP_NF_TARGET_TTL
 	tristate '"TTL" target support'
 	depends on NETFILTER_ADVANCED && IP_NF_MANGLE
 	select NETFILTER_XT_TARGET_HL
-	---help---
+	help
 	This is a backwards-compatible option for the user's convenience
 	(e.g. when running oldconfig). It selects
 	CONFIG_NETFILTER_XT_TARGET_HL.
@@ -319,9 +306,9 @@ config IP_NF_RAW
 	  This option adds a `raw' table to iptables. This table is the very
 	  first in the netfilter framework and hooks in at the PREROUTING
 	  and OUTPUT chains.
-	
+
 	  If you want to compile it as a module, say M here and read
-	  <file:Documentation/kbuild/modules.txt>.  If unsure, say `N'.
+	  <file:Documentation/kbuild/modules.rst>.  If unsure, say `N'.
 
 # security table for MAC policy
 config IP_NF_SECURITY
@@ -331,7 +318,7 @@ config IP_NF_SECURITY
 	help
 	  This option adds a `security' table to iptables, for use
 	  with Mandatory Access Control (MAC) policy.
-	 
+
 	  If unsure, say N.
 
 endif # IP_NF_IPTABLES

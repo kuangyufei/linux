@@ -1,28 +1,14 @@
-/*
- * cros_ec_vbc - Expose the vboot context nvram to userspace
- *
- * Copyright (C) 2015 Collabora Ltd.
- *
- * based on vendor driver,
- *
- * Copyright (C) 2012 The Chromium OS Authors
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- */
+// SPDX-License-Identifier: GPL-2.0+
+// Expose the vboot context nvram to userspace
+//
+// Copyright (C) 2012 Google, Inc.
+// Copyright (C) 2015 Collabora Ltd.
 
 #include <linux/of.h>
 #include <linux/platform_device.h>
-#include <linux/mfd/cros_ec.h>
-#include <linux/mfd/cros_ec_commands.h>
 #include <linux/module.h>
+#include <linux/platform_data/cros_ec_commands.h>
+#include <linux/platform_data/cros_ec_proto.h>
 #include <linux/slab.h>
 
 #define DRV_NAME "cros-ec-vbc"
@@ -31,7 +17,7 @@ static ssize_t vboot_context_read(struct file *filp, struct kobject *kobj,
 				  struct bin_attribute *att, char *buf,
 				  loff_t pos, size_t count)
 {
-	struct device *dev = container_of(kobj, struct device, kobj);
+	struct device *dev = kobj_to_dev(kobj);
 	struct cros_ec_dev *ec = to_cros_ec_dev(dev);
 	struct cros_ec_device *ecdev = ec->ec_dev;
 	struct ec_params_vbnvcontext *params;
@@ -54,7 +40,7 @@ static ssize_t vboot_context_read(struct file *filp, struct kobject *kobj,
 	msg->outsize = para_sz;
 	msg->insize = resp_sz;
 
-	err = cros_ec_cmd_xfer(ecdev, msg);
+	err = cros_ec_cmd_xfer_status(ecdev, msg);
 	if (err < 0) {
 		dev_err(dev, "Error sending read request: %d\n", err);
 		kfree(msg);
@@ -71,7 +57,7 @@ static ssize_t vboot_context_write(struct file *filp, struct kobject *kobj,
 				   struct bin_attribute *attr, char *buf,
 				   loff_t pos, size_t count)
 {
-	struct device *dev = container_of(kobj, struct device, kobj);
+	struct device *dev = kobj_to_dev(kobj);
 	struct cros_ec_dev *ec = to_cros_ec_dev(dev);
 	struct cros_ec_device *ecdev = ec->ec_dev;
 	struct ec_params_vbnvcontext *params;
@@ -97,7 +83,7 @@ static ssize_t vboot_context_write(struct file *filp, struct kobject *kobj,
 	msg->outsize = para_sz;
 	msg->insize = 0;
 
-	err = cros_ec_cmd_xfer(ecdev, msg);
+	err = cros_ec_cmd_xfer_status(ecdev, msg);
 	if (err < 0) {
 		dev_err(dev, "Error sending write request: %d\n", err);
 		kfree(msg);
@@ -115,7 +101,7 @@ static struct bin_attribute *cros_ec_vbc_bin_attrs[] = {
 	NULL
 };
 
-struct attribute_group cros_ec_vbc_attr_group = {
+static struct attribute_group cros_ec_vbc_attr_group = {
 	.name = "vbc",
 	.bin_attrs = cros_ec_vbc_bin_attrs,
 };

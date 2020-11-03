@@ -1,14 +1,12 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (C) 2011 Texas Instruments Incorporated - http://www.ti.com/
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
+ * Copyright (C) 2011 Texas Instruments Incorporated - https://www.ti.com/
  */
 /dts-v1/;
 
 #include "omap443x.dtsi"
 #include "elpida_ecb240abacn.dtsi"
+#include "omap4-mcpdm.dtsi"
 
 / {
 	model = "TI OMAP4 SDP board";
@@ -246,16 +244,6 @@
 		>;
 	};
 
-	mcpdm_pins: pinmux_mcpdm_pins {
-		pinctrl-single,pins = <
-			OMAP4_IOPAD(0x106, PIN_INPUT_PULLDOWN | MUX_MODE0)	/* abe_pdm_ul_data.abe_pdm_ul_data */
-			OMAP4_IOPAD(0x108, PIN_INPUT_PULLDOWN | MUX_MODE0)	/* abe_pdm_dl_data.abe_pdm_dl_data */
-			OMAP4_IOPAD(0x10a, PIN_INPUT_PULLUP | MUX_MODE0)	/* abe_pdm_frame.abe_pdm_frame */
-			OMAP4_IOPAD(0x10c, PIN_INPUT_PULLDOWN | MUX_MODE0)	/* abe_pdm_lb_clk.abe_pdm_lb_clk */
-			OMAP4_IOPAD(0x10e, PIN_INPUT_PULLDOWN | MUX_MODE0)	/* abe_clks.abe_clks */
-		>;
-	};
-
 	dmic_pins: pinmux_dmic_pins {
 		pinctrl-single,pins = <
 			OMAP4_IOPAD(0x110, PIN_OUTPUT | MUX_MODE0)		/* abe_dmic_clk1.abe_dmic_clk1 */
@@ -440,7 +428,7 @@
 
 	/*
 	 * Temperature Sensor
-	 * http://www.ti.com/lit/ds/symlink/tmp105.pdf
+	 * https://www.ti.com/lit/ds/symlink/tmp105.pdf
 	 */
 	tmp105@48 {
 		compatible = "ti,tmp105";
@@ -465,7 +453,7 @@
 
 	/*
 	 * 3-Axis Digital Compass
-	 * http://www.sparkfun.com/datasheets/Sensors/Magneto/HMC5843.pdf
+	 * https://www.sparkfun.com/datasheets/Sensors/Magneto/HMC5843.pdf
 	 */
 	hmc5843@1e {
 		compatible = "honeywell,hmc5843";
@@ -524,7 +512,7 @@
 		compatible = "ti,wl1281";
 		reg = <2>;
 		interrupt-parent = <&gpio1>;
-		interrupts = <21 IRQ_TYPE_EDGE_RISING>; /* gpio 53 */
+		interrupts = <21 IRQ_TYPE_LEVEL_HIGH>; /* gpio 53 */
 		ref-clock-frequency = <26000000>;
 		tcxo-clock-frequency = <26000000>;
 	};
@@ -649,16 +637,6 @@
 	status = "okay";
 };
 
-&mcpdm {
-	pinctrl-names = "default";
-	pinctrl-0 = <&mcpdm_pins>;
-
-	clocks = <&twl6040>;
-	clock-names = "pdmclk";
-
-	status = "okay";
-};
-
 &twl_usb_comparator {
 	usb-supply = <&vusb>;
 };
@@ -670,11 +648,11 @@
 };
 
 &dss {
-	status = "ok";
+	status = "okay";
 };
 
 &dsi1 {
-	status = "ok";
+	status = "okay";
 	vdd-supply = <&vcxio>;
 
 	port {
@@ -684,8 +662,9 @@
 		};
 	};
 
-	lcd0: display {
+	lcd0: panel@0 {
 		compatible = "tpo,taal", "panel-dsi-cm";
+		reg = <0>;
 		label = "lcd0";
 
 		reset-gpios = <&gpio4 6 GPIO_ACTIVE_HIGH>;	/* 102 */
@@ -699,7 +678,7 @@
 };
 
 &dsi2 {
-	status = "ok";
+	status = "okay";
 	vdd-supply = <&vcxio>;
 
 	port {
@@ -709,8 +688,9 @@
 		};
 	};
 
-	lcd1: display {
+	lcd1: panel@0 {
 		compatible = "tpo,taal", "panel-dsi-cm";
+		reg = <0>;
 		label = "lcd1";
 
 		reset-gpios = <&gpio4 8 GPIO_ACTIVE_HIGH>;	/* 104 */
@@ -724,7 +704,7 @@
 };
 
 &hdmi {
-	status = "ok";
+	status = "okay";
 	vdda-supply = <&vdac>;
 
 	port {

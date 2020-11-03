@@ -56,6 +56,7 @@
 		backlight: backlight@2c {
 			compatible = "ti,lp8557";
 			reg = <0x2c>;
+			power-supply = <&vdd_3v3_sys>;
 
 			dev-ctrl = /bits/ 8 <0x80>;
 			init-brt = /bits/ 8 <0xff>;
@@ -79,6 +80,21 @@
 		};
 	};
 
+	i2c@7000c500 {
+		/* carrier board ID EEPROM */
+		eeprom@57 {
+			compatible = "atmel,24c02";
+			reg = <0x57>;
+
+			label = "system";
+			vcc-supply = <&vdd_1v8>;
+			address-width = <8>;
+			pagesize = <8>;
+			size = <256>;
+			read-only;
+		};
+	};
+
 	clock@70110000 {
 		status = "okay";
 
@@ -98,5 +114,17 @@
 		pinctrl-names = "dvfs_pwm_enable", "dvfs_pwm_disable";
 		pinctrl-0 = <&dvfs_pwm_active_state>;
 		pinctrl-1 = <&dvfs_pwm_inactive_state>;
+	};
+
+	aconnect@702c0000 {
+		status = "okay";
+
+		dma@702e2000 {
+			status = "okay";
+		};
+
+		interrupt-controller@702f9000 {
+			status = "okay";
+		};
 	};
 };

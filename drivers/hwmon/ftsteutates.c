@@ -1,19 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * Support for the FTS Systemmonitoring Chip "Teutates"
  *
  * Copyright (C) 2016 Fujitsu Technology Solutions GmbH,
  *		  Thilo Cestonaro <thilo.cestonaro@ts.fujitsu.com>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
  */
 #include <linux/err.h>
 #include <linux/fs.h>
@@ -762,7 +752,7 @@ static int fts_remove(struct i2c_client *client)
 	return 0;
 }
 
-static int fts_probe(struct i2c_client *client, const struct i2c_device_id *id)
+static int fts_probe(struct i2c_client *client)
 {
 	u8 revision;
 	struct fts_data *data;
@@ -829,7 +819,7 @@ static struct i2c_driver fts_driver = {
 		.name = "ftsteutates",
 	},
 	.id_table = fts_id,
-	.probe = fts_probe,
+	.probe_new = fts_probe,
 	.remove = fts_remove,
 	.detect = fts_detect,
 	.address_list = normal_i2c,

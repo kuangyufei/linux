@@ -1,20 +1,11 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * powr1220.c - Driver for the Lattice POWR1220 programmable power supply
  * and monitor. Users can read all ADC inputs along with their labels
  * using the sysfs nodes.
  *
- * Copyright (c) 2014 Echo360 http://www.echo360.com
+ * Copyright (c) 2014 Echo360 https://www.echo360.com
  * Scott Kanowitz <skanowitz@echo360.com> <scott.kanowitz@gmail.com>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  */
 
 #include <linux/module.h>
@@ -306,8 +297,7 @@ static struct attribute *powr1220_attrs[] = {
 
 ATTRIBUTE_GROUPS(powr1220);
 
-static int powr1220_probe(struct i2c_client *client,
-		const struct i2c_device_id *id)
+static int powr1220_probe(struct i2c_client *client)
 {
 	struct powr1220_data *data;
 	struct device *hwmon_dev;
@@ -340,7 +330,7 @@ static struct i2c_driver powr1220_driver = {
 	.driver = {
 		.name	= "powr1220",
 	},
-	.probe		= powr1220_probe,
+	.probe_new	= powr1220_probe,
 	.id_table	= powr1220_ids,
 };
 

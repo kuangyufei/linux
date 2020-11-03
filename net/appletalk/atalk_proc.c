@@ -1,11 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * 	atalk_proc.c - proc support for Appletalk
  *
  * 	Copyright(c) Arnaldo Carvalho de Melo <acme@conectiva.com.br>
- *
- *	This program is free software; you can redistribute it and/or modify it
- *	under the terms of the GNU General Public License as published by the
- *	Free Software Foundation, version 2.
  */
 
 #include <linux/init.h>
@@ -231,6 +228,8 @@ int __init atalk_proc_init(void)
 				     &aarp_seq_ops,
 				     sizeof(struct aarp_iter_state), NULL))
 		goto out;
+
+	return 0;
 
 out:
 	remove_proc_subtree("atalk", init_net.proc_net);

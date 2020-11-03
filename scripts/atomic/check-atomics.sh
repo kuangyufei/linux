@@ -16,13 +16,14 @@ fi
 cat <<EOF |
 asm-generic/atomic-instrumented.h
 asm-generic/atomic-long.h
+linux/atomic-arch-fallback.h
 linux/atomic-fallback.h
 EOF
 while read header; do
 	OLDSUM="$(tail -n 1 ${LINUXDIR}/include/${header})"
 	OLDSUM="${OLDSUM#// }"
 
-	NEWSUM="$(head -n -1 ${LINUXDIR}/include/${header} | sha1sum)"
+	NEWSUM="$(sed '$d' ${LINUXDIR}/include/${header} | sha1sum)"
 	NEWSUM="${NEWSUM%% *}"
 
 	if [ "${OLDSUM}" != "${NEWSUM}" ]; then

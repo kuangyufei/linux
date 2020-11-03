@@ -417,6 +417,7 @@ int ila_xlat_nl_cmd_flush(struct sk_buff *skb, struct genl_info *info)
 
 done:
 	rhashtable_walk_stop(&iter);
+	rhashtable_walk_exit(&iter);
 	return ret;
 }
 
@@ -599,8 +600,6 @@ out_ret:
 	rhashtable_walk_stop(rhiter);
 	return ret;
 }
-
-#define ILA_HASH_TABLE_SIZE 1024
 
 int ila_xlat_init_net(struct net *net)
 {

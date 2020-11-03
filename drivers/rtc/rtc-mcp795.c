@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * SPI Driver for Microchip MCP795 RTC
  *
@@ -6,12 +7,7 @@
  * based on other Linux RTC drivers
  *
  * Device datasheet:
- * http://ww1.microchip.com/downloads/en/DeviceDoc/22280A.pdf
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
+ * https://ww1.microchip.com/downloads/en/DeviceDoc/22280A.pdf
  */
 
 #include <linux/module.h>

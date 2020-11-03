@@ -46,17 +46,12 @@ struct mlx5_core_srq {
 	int wqe_shift;
 	void (*event)(struct mlx5_core_srq *srq, enum mlx5_event e);
 
-	atomic_t refcount;
-	struct completion free;
 	u16 uid;
 };
 
 struct mlx5_srq_table {
 	struct notifier_block nb;
-	/* protect radix tree
-	 */
-	spinlock_t lock;
-	struct radix_tree_root tree;
+	struct xarray array;
 };
 
 int mlx5_cmd_create_srq(struct mlx5_ib_dev *dev, struct mlx5_core_srq *srq,

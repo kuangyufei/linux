@@ -1,6 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (C) 2001 - 2007 Jeff Dike (jdike@{addtoit,linux.intel}.com)
- * Licensed under the GPL
  */
 
 #include <linux/irqreturn.h>
@@ -182,11 +182,6 @@ void line_flush_buffer(struct tty_struct *tty)
 void line_flush_chars(struct tty_struct *tty)
 {
 	line_flush_buffer(tty);
-}
-
-int line_put_char(struct tty_struct *tty, unsigned char ch)
-{
-	return line_write(tty, &ch, sizeof(ch));
 }
 
 int line_write(struct tty_struct *tty, const unsigned char *buf, int len)

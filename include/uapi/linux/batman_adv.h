@@ -1,25 +1,7 @@
 /* SPDX-License-Identifier: MIT */
-/* Copyright (C) 2016-2019  B.A.T.M.A.N. contributors:
+/* Copyright (C) 2016-2020  B.A.T.M.A.N. contributors:
  *
  * Matthias Schiffer
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
- * DEALINGS IN THE SOFTWARE.
  */
 
 #ifndef _UAPI_LINUX_BATMAN_ADV_H_
@@ -87,7 +69,7 @@ enum batadv_tt_client_flags {
 
 	/**
 	 * @BATADV_TT_CLIENT_TEMP: this global client has been detected to be
-	 * part of the network but no nnode has already announced it
+	 * part of the network but no node has already announced it
 	 */
 	BATADV_TT_CLIENT_TEMP	 = (1 << 11),
 };
@@ -149,7 +131,7 @@ enum batadv_gw_modes {
 	/** @BATADV_GW_MODE_CLIENT: send DHCP requests to gw servers */
 	BATADV_GW_MODE_CLIENT,
 
-	/** @BATADV_GW_MODE_SERVER: announce itself as gatway server */
+	/** @BATADV_GW_MODE_SERVER: announce itself as gateway server */
 	BATADV_GW_MODE_SERVER,
 };
 
@@ -445,7 +427,8 @@ enum batadv_nl_attrs {
 
 	/**
 	 * @BATADV_ATTR_HOP_PENALTY: defines the penalty which will be applied
-	 *  to an originator message's tq-field on every hop.
+	 *  to an originator message's tq-field on every hop and/or per
+	 *  hard interface
 	 */
 	BATADV_ATTR_HOP_PENALTY,
 
@@ -490,6 +473,13 @@ enum batadv_nl_attrs {
 	 *  estimate the throughput by itself.
 	 */
 	BATADV_ATTR_THROUGHPUT_OVERRIDE,
+
+	/**
+	 * @BATADV_ATTR_MULTICAST_FANOUT: defines the maximum number of packet
+	 * copies that may be generated for a multicast-to-unicast conversion.
+	 * Once this limit is exceeded distribution will fall back to broadcast.
+	 */
+	BATADV_ATTR_MULTICAST_FANOUT,
 
 	/* add attributes above here, update the policy in netlink.c */
 

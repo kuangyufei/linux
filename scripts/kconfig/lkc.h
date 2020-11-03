@@ -34,6 +34,8 @@ enum conf_def_mode {
 	def_default,
 	def_yes,
 	def_mod,
+	def_y2m,
+	def_m2y,
 	def_no,
 	def_random
 };
@@ -49,11 +51,10 @@ const char *zconf_curname(void);
 
 /* confdata.c */
 const char *conf_get_configname(void);
-const char *conf_get_autoconfig_name(void);
-char *conf_get_default_confname(void);
 void sym_set_change_count(int count);
 void sym_add_change_count(int count);
 bool conf_set_all_new_symbols(enum conf_def_mode mode);
+void conf_rewrite_mod_or_yes(enum conf_def_mode mode);
 void set_all_choice_values(struct symbol *csym);
 
 /* confdata.c and expr.c */
@@ -64,6 +65,32 @@ static inline void xfwrite(const void *str, size_t len, size_t count, FILE *out)
 	if (fwrite(str, len, count, out) != count)
 		fprintf(stderr, "Error in writing or end of file.\n");
 }
+
+/* util.c */
+struct file *file_lookup(const char *name);
+void *xmalloc(size_t size);
+void *xcalloc(size_t nmemb, size_t size);
+void *xrealloc(void *p, size_t size);
+char *xstrdup(const char *s);
+char *xstrndup(const char *s, size_t n);
+
+/* lexer.l */
+int yylex(void);
+
+struct gstr {
+	size_t len;
+	char  *s;
+	/*
+	* when max_width is not zero long lines in string s (if any) get
+	* wrapped not to exceed the max_width value
+	*/
+	int max_width;
+};
+struct gstr str_new(void);
+void str_free(struct gstr *gs);
+void str_append(struct gstr *gs, const char *s);
+void str_printf(struct gstr *gs, const char *fmt, ...);
+const char *str_get(struct gstr *gs);
 
 /* menu.c */
 void _menu_init(void);
@@ -82,31 +109,18 @@ void menu_add_option_allnoconfig_y(void);
 void menu_finalize(struct menu *parent);
 void menu_set_type(int type);
 
-/* util.c */
-struct file *file_lookup(const char *name);
-void *xmalloc(size_t size);
-void *xcalloc(size_t nmemb, size_t size);
-void *xrealloc(void *p, size_t size);
-char *xstrdup(const char *s);
-char *xstrndup(const char *s, size_t n);
+extern struct menu rootmenu;
 
-/* zconf.l */
-int yylex(void);
-
-struct gstr {
-	size_t len;
-	char  *s;
-	/*
-	* when max_width is not zero long lines in string s (if any) get
-	* wrapped not to exceed the max_width value
-	*/
-	int max_width;
-};
-struct gstr str_new(void);
-void str_free(struct gstr *gs);
-void str_append(struct gstr *gs, const char *s);
-void str_printf(struct gstr *gs, const char *fmt, ...);
-const char *str_get(struct gstr *gs);
+bool menu_is_empty(struct menu *menu);
+bool menu_is_visible(struct menu *menu);
+bool menu_has_prompt(struct menu *menu);
+const char *menu_get_prompt(struct menu *menu);
+struct menu *menu_get_root_menu(struct menu *menu);
+struct menu *menu_get_parent_menu(struct menu *menu);
+bool menu_has_help(struct menu *menu);
+const char *menu_get_help(struct menu *menu);
+struct gstr get_relations_str(struct symbol **sym_arr, struct list_head *head);
+void menu_get_ext_help(struct menu *menu, struct gstr *help);
 
 /* symbol.c */
 void sym_clear_all_valid(void);
@@ -114,7 +128,6 @@ struct symbol *sym_choice_default(struct symbol *sym);
 struct property *sym_get_range_prop(struct symbol *sym);
 const char *sym_get_string_default(struct symbol *sym);
 struct symbol *sym_check_deps(struct symbol *sym);
-struct property *prop_alloc(enum prop_type type, struct symbol *sym);
 struct symbol *prop_get_symbol(struct property *prop);
 
 static inline tristate sym_get_tristate_value(struct symbol *sym)

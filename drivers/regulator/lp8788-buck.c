@@ -1,14 +1,10 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * TI LP8788 MFD - buck regulator driver
  *
  * Copyright 2012 Texas Instruments
  *
  * Author: Milo(Woogyom) Kim <milo.kim@ti.com>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
  */
 
 #include <linux/module.h>
@@ -96,7 +92,7 @@ struct lp8788_buck {
 };
 
 /* BUCK 1 ~ 4 voltage ranges */
-static const struct regulator_linear_range buck_volt_ranges[] = {
+static const struct linear_range buck_volt_ranges[] = {
 	REGULATOR_LINEAR_RANGE(500000, 0, 0, 0),
 	REGULATOR_LINEAR_RANGE(800000, 1, 25, 50000),
 };

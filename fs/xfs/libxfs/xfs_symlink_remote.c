@@ -11,12 +11,8 @@
 #include "xfs_shared.h"
 #include "xfs_trans_resv.h"
 #include "xfs_mount.h"
-#include "xfs_bmap_btree.h"
 #include "xfs_inode.h"
 #include "xfs_error.h"
-#include "xfs_trace.h"
-#include "xfs_symlink.h"
-#include "xfs_cksum.h"
 #include "xfs_trans.h"
 #include "xfs_buf_item.h"
 #include "xfs_log.h"
@@ -90,7 +86,7 @@ static xfs_failaddr_t
 xfs_symlink_verify(
 	struct xfs_buf		*bp)
 {
-	struct xfs_mount	*mp = bp->b_target->bt_mount;
+	struct xfs_mount	*mp = bp->b_mount;
 	struct xfs_dsymlink_hdr	*dsl = bp->b_addr;
 
 	if (!xfs_sb_version_hascrc(&mp->m_sb))
@@ -116,7 +112,7 @@ static void
 xfs_symlink_read_verify(
 	struct xfs_buf	*bp)
 {
-	struct xfs_mount *mp = bp->b_target->bt_mount;
+	struct xfs_mount *mp = bp->b_mount;
 	xfs_failaddr_t	fa;
 
 	/* no verification of non-crc buffers */
@@ -136,7 +132,7 @@ static void
 xfs_symlink_write_verify(
 	struct xfs_buf	*bp)
 {
-	struct xfs_mount *mp = bp->b_target->bt_mount;
+	struct xfs_mount *mp = bp->b_mount;
 	struct xfs_buf_log_item	*bip = bp->b_log_item;
 	xfs_failaddr_t		fa;
 
@@ -208,16 +204,12 @@ xfs_failaddr_t
 xfs_symlink_shortform_verify(
 	struct xfs_inode	*ip)
 {
-	char			*sfp;
-	char			*endp;
-	struct xfs_ifork	*ifp;
-	int			size;
+	struct xfs_ifork	*ifp = XFS_IFORK_PTR(ip, XFS_DATA_FORK);
+	char			*sfp = (char *)ifp->if_u1.if_data;
+	int			size = ifp->if_bytes;
+	char			*endp = sfp + size;
 
-	ASSERT(ip->i_d.di_format == XFS_DINODE_FMT_LOCAL);
-	ifp = XFS_IFORK_PTR(ip, XFS_DATA_FORK);
-	sfp = (char *)ifp->if_u1.if_data;
-	size = ifp->if_bytes;
-	endp = sfp + size;
+	ASSERT(ifp->if_format == XFS_DINODE_FMT_LOCAL);
 
 	/*
 	 * Zero length symlinks should never occur in memory as they are

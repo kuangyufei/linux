@@ -1,11 +1,7 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * Copyright (C) IBM Corporation, 2014, 2017
  * Anton Blanchard, Rashmica Gupta.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
  */
 
 #define pr_fmt(fmt) "memtrace: " fmt
@@ -74,23 +70,23 @@ static int change_memblock_state(struct memory_block *mem, void *arg)
 /* called with device_hotplug_lock held */
 static bool memtrace_offline_pages(u32 nid, u64 start_pfn, u64 nr_pages)
 {
-	u64 end_pfn = start_pfn + nr_pages - 1;
+	const unsigned long start = PFN_PHYS(start_pfn);
+	const unsigned long size = PFN_PHYS(nr_pages);
 
-	if (walk_memory_range(start_pfn, end_pfn, NULL,
-	    check_memblock_online))
+	if (walk_memory_blocks(start, size, NULL, check_memblock_online))
 		return false;
 
-	walk_memory_range(start_pfn, end_pfn, (void *)MEM_GOING_OFFLINE,
-			  change_memblock_state);
+	walk_memory_blocks(start, size, (void *)MEM_GOING_OFFLINE,
+			   change_memblock_state);
 
 	if (offline_pages(start_pfn, nr_pages)) {
-		walk_memory_range(start_pfn, end_pfn, (void *)MEM_ONLINE,
-				  change_memblock_state);
+		walk_memory_blocks(start, size, (void *)MEM_ONLINE,
+				   change_memblock_state);
 		return false;
 	}
 
-	walk_memory_range(start_pfn, end_pfn, (void *)MEM_OFFLINE,
-			  change_memblock_state);
+	walk_memory_blocks(start, size, (void *)MEM_OFFLINE,
+			   change_memblock_state);
 
 
 	return true;
@@ -191,11 +187,6 @@ static int memtrace_init_debugfs(void)
 
 		snprintf(ent->name, 16, "%08x", ent->nid);
 		dir = debugfs_create_dir(ent->name, memtrace_debugfs_dir);
-		if (!dir) {
-			pr_err("Failed to create debugfs directory for node %d\n",
-				ent->nid);
-			return -1;
-		}
 
 		ent->dir = dir;
 		debugfs_create_file("trace", 0400, dir, ent, &memtrace_fops);
@@ -233,24 +224,17 @@ static int memtrace_online(void)
 			ent->mem = 0;
 		}
 
-		if (add_memory(ent->nid, ent->start, ent->size)) {
+		if (add_memory(ent->nid, ent->start, ent->size, MHP_NONE)) {
 			pr_err("Failed to add trace memory to node %d\n",
 				ent->nid);
 			ret += 1;
 			continue;
 		}
 
-		/*
-		 * If kernel isn't compiled with the auto online option
-		 * we need to online the memory ourselves.
-		 */
-		if (!memhp_auto_online) {
-			lock_device_hotplug();
-			walk_memory_range(PFN_DOWN(ent->start),
-					  PFN_UP(ent->start + ent->size - 1),
-					  NULL, online_mem_block);
-			unlock_device_hotplug();
-		}
+		lock_device_hotplug();
+		walk_memory_blocks(ent->start, ent->size, NULL,
+				   online_mem_block);
+		unlock_device_hotplug();
 
 		/*
 		 * Memory was added successfully so clean up references to it
@@ -319,8 +303,6 @@ static int memtrace_init(void)
 {
 	memtrace_debugfs_dir = debugfs_create_dir("memtrace",
 						  powerpc_debugfs_root);
-	if (!memtrace_debugfs_dir)
-		return -1;
 
 	debugfs_create_file("enable", 0600, memtrace_debugfs_dir,
 			    NULL, &memtrace_init_fops);

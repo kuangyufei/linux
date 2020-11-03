@@ -204,7 +204,7 @@ static void net_rx(struct net_device *dev);
 static void read_block(long ioaddr, int length, unsigned char *buffer, int data_mode);
 static int net_close(struct net_device *dev);
 static void set_rx_mode(struct net_device *dev);
-static void tx_timeout(struct net_device *dev);
+static void tx_timeout(struct net_device *dev, unsigned int txqueue);
 
 
 /* A list of all installed ATP devices, for removing the driver module. */
@@ -482,7 +482,7 @@ static void hardware_init(struct net_device *dev)
 	write_reg_high(ioaddr, IMR, ISRh_RxErr);
 
 	lp->tx_unit_busy = 0;
-    lp->pac_cnt_in_tx_buf = 0;
+	lp->pac_cnt_in_tx_buf = 0;
 	lp->saved_tx_size = 0;
 }
 
@@ -533,7 +533,7 @@ static void write_packet(long ioaddr, int length, unsigned char *packet, int pad
     outb(Ctrl_HNibWrite | Ctrl_SelData | Ctrl_IRQEN, ioaddr + PAR_CONTROL);
 }
 
-static void tx_timeout(struct net_device *dev)
+static void tx_timeout(struct net_device *dev, unsigned int txqueue)
 {
 	long ioaddr = dev->base_addr;
 

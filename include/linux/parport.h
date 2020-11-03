@@ -325,18 +325,10 @@ struct pardev_cb {
 	unsigned int flags;
 };
 
-/* parport_register_device declares that a device is connected to a
-   port, and tells the kernel all it needs to know.
-   - pf is the preemption function (may be NULL for no callback)
-   - kf is the wake-up function (may be NULL for no callback)
-   - irq_func is the interrupt handler (may be NULL for no interrupts)
-   - handle is a user pointer that gets handed to callback functions.  */
-struct pardevice *parport_register_device(struct parport *port, 
-			  const char *name,
-			  int (*pf)(void *), void (*kf)(void *),
-			  void (*irq_func)(void *), 
-			  int flags, void *handle);
-
+/*
+ * parport_register_dev_model declares that a device is connected to a
+ * port, and tells the kernel all it needs to know.
+ */
 struct pardevice *
 parport_register_dev_model(struct parport *port, const char *name,
 			   const struct pardev_cb *par_dev_cb, int cnt);
@@ -468,18 +460,6 @@ extern void parport_close (struct pardevice *dev);
 extern ssize_t parport_device_id (int devnum, char *buffer, size_t len);
 extern void parport_daisy_deselect_all (struct parport *port);
 extern int parport_daisy_select (struct parport *port, int daisy, int mode);
-
-#ifdef CONFIG_PARPORT_1284
-extern int daisy_drv_init(void);
-extern void daisy_drv_exit(void);
-#else
-static inline int daisy_drv_init(void)
-{
-	return 0;
-}
-
-static inline void daisy_drv_exit(void) {}
-#endif
 
 /* Lowlevel drivers _can_ call this support function to handle irqs.  */
 static inline void parport_generic_irq(struct parport *port)

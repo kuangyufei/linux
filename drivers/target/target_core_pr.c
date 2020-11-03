@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*******************************************************************************
  * Filename:  target_core_pr.c
  *
@@ -7,20 +8,6 @@
  * (c) Copyright 2009-2013 Datera, Inc.
  *
  * Nicholas A. Bellinger <nab@kernel.org>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
  *
  ******************************************************************************/
 
@@ -111,10 +98,10 @@ target_scsi2_reservation_check(struct se_cmd *cmd)
 		break;
 	}
 
-	if (!dev->dev_reserved_node_acl || !sess)
+	if (!dev->reservation_holder || !sess)
 		return 0;
 
-	if (dev->dev_reserved_node_acl != sess->se_node_acl)
+	if (dev->reservation_holder->se_node_acl != sess->se_node_acl)
 		return TCM_RESERVATION_CONFLICT;
 
 	if (dev->dev_reservation_flags & DRF_SPC2_RESERVATIONS_WITH_ISID) {
@@ -200,6 +187,16 @@ static int target_check_scsi2_reservation_conflict(struct se_cmd *cmd)
 	return 0;
 }
 
+void target_release_reservation(struct se_device *dev)
+{
+	dev->reservation_holder = NULL;
+	dev->dev_reservation_flags &= ~DRF_SPC2_RESERVATIONS;
+	if (dev->dev_reservation_flags & DRF_SPC2_RESERVATIONS_WITH_ISID) {
+		dev->dev_res_bin_isid = 0;
+		dev->dev_reservation_flags &= ~DRF_SPC2_RESERVATIONS_WITH_ISID;
+	}
+}
+
 sense_reason_t
 target_scsi2_reservation_release(struct se_cmd *cmd)
 {
@@ -217,21 +214,16 @@ target_scsi2_reservation_release(struct se_cmd *cmd)
 		return TCM_RESERVATION_CONFLICT;
 
 	spin_lock(&dev->dev_reservation_lock);
-	if (!dev->dev_reserved_node_acl || !sess)
+	if (!dev->reservation_holder || !sess)
 		goto out_unlock;
 
-	if (dev->dev_reserved_node_acl != sess->se_node_acl)
+	if (dev->reservation_holder->se_node_acl != sess->se_node_acl)
 		goto out_unlock;
 
 	if (dev->dev_res_bin_isid != sess->sess_bin_isid)
 		goto out_unlock;
 
-	dev->dev_reserved_node_acl = NULL;
-	dev->dev_reservation_flags &= ~DRF_SPC2_RESERVATIONS;
-	if (dev->dev_reservation_flags & DRF_SPC2_RESERVATIONS_WITH_ISID) {
-		dev->dev_res_bin_isid = 0;
-		dev->dev_reservation_flags &= ~DRF_SPC2_RESERVATIONS_WITH_ISID;
-	}
+	target_release_reservation(dev);
 	tpg = sess->se_tpg;
 	pr_debug("SCSI-2 Released reservation for %s LUN: %llu ->"
 		" MAPPED LUN: %llu for %s\n",
@@ -275,13 +267,13 @@ target_scsi2_reservation_reserve(struct se_cmd *cmd)
 
 	tpg = sess->se_tpg;
 	spin_lock(&dev->dev_reservation_lock);
-	if (dev->dev_reserved_node_acl &&
-	   (dev->dev_reserved_node_acl != sess->se_node_acl)) {
+	if (dev->reservation_holder &&
+	    dev->reservation_holder->se_node_acl != sess->se_node_acl) {
 		pr_err("SCSI-2 RESERVATION CONFLIFT for %s fabric\n",
 			tpg->se_tpg_tfo->fabric_name);
 		pr_err("Original reserver LUN: %llu %s\n",
 			cmd->se_lun->unpacked_lun,
-			dev->dev_reserved_node_acl->initiatorname);
+			dev->reservation_holder->se_node_acl->initiatorname);
 		pr_err("Current attempt - LUN: %llu -> MAPPED LUN: %llu"
 			" from %s \n", cmd->se_lun->unpacked_lun,
 			cmd->orig_fe_lun,
@@ -290,7 +282,7 @@ target_scsi2_reservation_reserve(struct se_cmd *cmd)
 		goto out_unlock;
 	}
 
-	dev->dev_reserved_node_acl = sess->se_node_acl;
+	dev->reservation_holder = sess;
 	dev->dev_reservation_flags |= DRF_SPC2_RESERVATIONS;
 	if (sess->sess_bin_isid != 0) {
 		dev->dev_res_bin_isid = sess->sess_bin_isid;
@@ -353,7 +345,7 @@ static int core_scsi3_pr_seq_non_holder(struct se_cmd *cmd, u32 pr_reg_type,
 		break;
 	case PR_TYPE_WRITE_EXCLUSIVE_REGONLY:
 		we = 1;
-		/* fall through */
+		fallthrough;
 	case PR_TYPE_EXCLUSIVE_ACCESS_REGONLY:
 		/*
 		 * Some commands are only allowed for registered I_T Nexuses.
@@ -362,7 +354,7 @@ static int core_scsi3_pr_seq_non_holder(struct se_cmd *cmd, u32 pr_reg_type,
 		break;
 	case PR_TYPE_WRITE_EXCLUSIVE_ALLREG:
 		we = 1;
-		/* fall through */
+		fallthrough;
 	case PR_TYPE_EXCLUSIVE_ACCESS_ALLREG:
 		/*
 		 * Each registered I_T Nexus is a reservation holder.
@@ -1167,7 +1159,6 @@ static struct t10_pr_registration *__core_scsi3_locate_pr_reg(
 {
 	struct t10_reservation *pr_tmpl = &dev->t10_pr;
 	struct t10_pr_registration *pr_reg, *pr_reg_tmp;
-	struct se_portal_group *tpg;
 
 	spin_lock(&pr_tmpl->registration_lock);
 	list_for_each_entry_safe(pr_reg, pr_reg_tmp,
@@ -1178,21 +1169,11 @@ static struct t10_pr_registration *__core_scsi3_locate_pr_reg(
 		if (pr_reg->pr_reg_nacl != nacl)
 			continue;
 
-		tpg = pr_reg->pr_reg_nacl->se_tpg;
 		/*
 		 * If this registration does NOT contain a fabric provided
 		 * ISID, then we have found a match.
 		 */
 		if (!pr_reg->isid_present_at_reg) {
-			/*
-			 * Determine if this SCSI device server requires that
-			 * SCSI Intiatior TransportID w/ ISIDs is enforced
-			 * for fabric modules (iSCSI) requiring them.
-			 */
-			if (tpg->se_tpg_tfo->sess_get_initiator_sid != NULL) {
-				if (dev->dev_attrib.enforce_pr_isids)
-					continue;
-			}
 			atomic_inc_mb(&pr_reg->pr_res_holders);
 			spin_unlock(&pr_tmpl->registration_lock);
 			return pr_reg;
@@ -1290,9 +1271,6 @@ static int core_scsi3_check_implicit_release(
 	return ret;
 }
 
-/*
- * Called with struct t10_reservation->registration_lock held.
- */
 static void __core_scsi3_free_registration(
 	struct se_device *dev,
 	struct t10_pr_registration *pr_reg,
@@ -1307,6 +1285,8 @@ static void __core_scsi3_free_registration(
 	struct se_node_acl *nacl = pr_reg->pr_reg_nacl;
 	struct se_dev_entry *deve;
 	char i_buf[PR_REG_ISID_ID_LEN];
+
+	lockdep_assert_held(&pr_tmpl->registration_lock);
 
 	memset(i_buf, 0, PR_REG_ISID_ID_LEN);
 	core_pr_dump_initiator_port(pr_reg, i_buf, PR_REG_ISID_ID_LEN);
@@ -1539,13 +1519,16 @@ core_scsi3_decode_spec_i_port(
 		kfree(tidh_new);
 		return TCM_INSUFFICIENT_REGISTRATION_RESOURCES;
 	}
+
+	if (core_scsi3_lunacl_depend_item(local_pr_reg->pr_reg_deve)) {
+		kfree(tidh_new);
+		kref_put(&local_pr_reg->pr_reg_deve->pr_kref,
+			 target_pr_kref_release);
+		kmem_cache_free(t10_pr_reg_cache, local_pr_reg);
+		return TCM_INSUFFICIENT_REGISTRATION_RESOURCES;
+	}
+
 	tidh_new->dest_pr_reg = local_pr_reg;
-	/*
-	 * The local I_T nexus does not hold any configfs dependances,
-	 * so we set tidh_new->dest_se_deve to NULL to prevent the
-	 * configfs_undepend_item() calls in the tid_dest_list loops below.
-	 */
-	tidh_new->dest_se_deve = NULL;
 	list_add_tail(&tidh_new->dest_list, &tid_dest_list);
 
 	if (cmd->data_length < 28) {
@@ -1600,10 +1583,25 @@ core_scsi3_decode_spec_i_port(
 				continue;
 			dest_rtpi = tmp_lun->lun_rtpi;
 
+			iport_ptr = NULL;
 			i_str = target_parse_pr_out_transport_id(tmp_tpg,
 					ptr, &tid_len, &iport_ptr);
 			if (!i_str)
 				continue;
+			/*
+			 * Determine if this SCSI device server requires that
+			 * SCSI Intiatior TransportID w/ ISIDs is enforced
+			 * for fabric modules (iSCSI) requiring them.
+			 */
+			if (tpg->se_tpg_tfo->sess_get_initiator_sid &&
+			    dev->dev_attrib.enforce_pr_isids &&
+			    !iport_ptr) {
+				pr_warn("SPC-PR: enforce_pr_isids is set but a isid has not been sent in the SPEC_I_PT data for %s.",
+					i_str);
+				ret = TCM_INVALID_PARAMETER_LIST;
+				spin_unlock(&dev->se_port_lock);
+				goto out_unmap;
+			}
 
 			atomic_inc_mb(&tmp_tpg->tpg_pr_ref_count);
 			spin_unlock(&dev->se_port_lock);
@@ -1819,12 +1817,9 @@ core_scsi3_decode_spec_i_port(
 			dest_node_acl->initiatorname, i_buf, (dest_se_deve) ?
 			dest_se_deve->mapped_lun : 0);
 
-		if (!dest_se_deve) {
-			kref_put(&local_pr_reg->pr_reg_deve->pr_kref,
-				 target_pr_kref_release);
+		if (dest_pr_reg == local_pr_reg)
 			continue;
-		}
-		core_scsi3_lunacl_undepend_item(dest_se_deve);
+
 		core_scsi3_nodeacl_undepend_item(dest_node_acl);
 		core_scsi3_tpg_undepend_item(dest_tpg);
 	}
@@ -1838,10 +1833,15 @@ out:
 	 * including *dest_pr_reg and the configfs dependances..
 	 */
 	list_for_each_entry_safe(tidh, tidh_tmp, &tid_dest_list, dest_list) {
+		bool is_local = false;
+
 		dest_tpg = tidh->dest_tpg;
 		dest_node_acl = tidh->dest_node_acl;
 		dest_se_deve = tidh->dest_se_deve;
 		dest_pr_reg = tidh->dest_pr_reg;
+
+		if (dest_pr_reg == local_pr_reg)
+			is_local = true;
 
 		list_del(&tidh->dest_list);
 		kfree(tidh);
@@ -1858,13 +1858,11 @@ out:
 		}
 
 		kmem_cache_free(t10_pr_reg_cache, dest_pr_reg);
-
-		if (!dest_se_deve) {
-			kref_put(&local_pr_reg->pr_reg_deve->pr_kref,
-				 target_pr_kref_release);
-			continue;
-		}
 		core_scsi3_lunacl_undepend_item(dest_se_deve);
+
+		if (is_local)
+			continue;
+
 		core_scsi3_nodeacl_undepend_item(dest_node_acl);
 		core_scsi3_tpg_undepend_item(dest_tpg);
 	}
@@ -2450,9 +2448,6 @@ core_scsi3_emulate_pro_reserve(struct se_cmd *cmd, int type, int scope,
 	}
 }
 
-/*
- * Called with struct se_device->dev_reservation_lock held.
- */
 static void __core_scsi3_complete_pro_release(
 	struct se_device *dev,
 	struct se_node_acl *se_nacl,
@@ -2463,6 +2458,8 @@ static void __core_scsi3_complete_pro_release(
 	const struct target_core_fabric_ops *tfo = se_nacl->se_tpg->se_tpg_tfo;
 	char i_buf[PR_REG_ISID_ID_LEN];
 	int pr_res_type = 0, pr_res_scope = 0;
+
+	lockdep_assert_held(&dev->dev_reservation_lock);
 
 	memset(i_buf, 0, PR_REG_ISID_ID_LEN);
 	core_pr_dump_initiator_port(pr_reg, i_buf, PR_REG_ISID_ID_LEN);
@@ -2760,9 +2757,6 @@ core_scsi3_emulate_pro_clear(struct se_cmd *cmd, u64 res_key)
 	return 0;
 }
 
-/*
- * Called with struct se_device->dev_reservation_lock held.
- */
 static void __core_scsi3_complete_pro_preempt(
 	struct se_device *dev,
 	struct t10_pr_registration *pr_reg,
@@ -2774,6 +2768,8 @@ static void __core_scsi3_complete_pro_preempt(
 	struct se_node_acl *nacl = pr_reg->pr_reg_nacl;
 	const struct target_core_fabric_ops *tfo = nacl->se_tpg->se_tpg_tfo;
 	char i_buf[PR_REG_ISID_ID_LEN];
+
+	lockdep_assert_held(&dev->dev_reservation_lock);
 
 	memset(i_buf, 0, PR_REG_ISID_ID_LEN);
 	core_pr_dump_initiator_port(pr_reg, i_buf, PR_REG_ISID_ID_LEN);
@@ -4097,7 +4093,7 @@ target_check_reservation(struct se_cmd *cmd)
 		return 0;
 	if (!dev->dev_attrib.emulate_pr)
 		return 0;
-	if (dev->transport->transport_flags & TRANSPORT_FLAG_PASSTHROUGH_PGR)
+	if (dev->transport_flags & TRANSPORT_FLAG_PASSTHROUGH_PGR)
 		return 0;
 
 	spin_lock(&dev->dev_reservation_lock);

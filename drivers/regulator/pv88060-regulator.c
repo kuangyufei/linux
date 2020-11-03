@@ -1,17 +1,7 @@
-/*
- * pv88060-regulator.c - Regulator device driver for PV88060
- * Copyright (C) 2015  Powerventure Semiconductor Ltd.
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- */
+// SPDX-License-Identifier: GPL-2.0+
+//
+// pv88060-regulator.c - Regulator device driver for PV88060
+// Copyright (C) 2015  Powerventure Semiconductor Ltd.
 
 #include <linux/err.h>
 #include <linux/i2c.h>
@@ -243,11 +233,10 @@ static irqreturn_t pv88060_irq_handler(int irq, void *data)
 
 	if (reg_val & PV88060_E_VDD_FLT) {
 		for (i = 0; i < PV88060_MAX_REGULATORS; i++) {
-			if (chip->rdev[i] != NULL) {
+			if (chip->rdev[i] != NULL)
 				regulator_notifier_call_chain(chip->rdev[i],
 					REGULATOR_EVENT_UNDER_VOLTAGE,
 					NULL);
-			}
 		}
 
 		err = regmap_write(chip->regmap, PV88060_REG_EVENT_A,
@@ -260,11 +249,10 @@ static irqreturn_t pv88060_irq_handler(int irq, void *data)
 
 	if (reg_val & PV88060_E_OVER_TEMP) {
 		for (i = 0; i < PV88060_MAX_REGULATORS; i++) {
-			if (chip->rdev[i] != NULL) {
+			if (chip->rdev[i] != NULL)
 				regulator_notifier_call_chain(chip->rdev[i],
 					REGULATOR_EVENT_OVER_TEMP,
 					NULL);
-			}
 		}
 
 		err = regmap_write(chip->regmap, PV88060_REG_EVENT_A,
@@ -285,8 +273,7 @@ error_i2c:
 /*
  * I2C driver interface functions
  */
-static int pv88060_i2c_probe(struct i2c_client *i2c,
-		const struct i2c_device_id *id)
+static int pv88060_i2c_probe(struct i2c_client *i2c)
 {
 	struct regulator_init_data *init_data = dev_get_platdata(&i2c->dev);
 	struct pv88060 *chip;
@@ -391,7 +378,7 @@ static struct i2c_driver pv88060_regulator_driver = {
 		.name = "pv88060",
 		.of_match_table = of_match_ptr(pv88060_dt_ids),
 	},
-	.probe = pv88060_i2c_probe,
+	.probe_new = pv88060_i2c_probe,
 	.id_table = pv88060_i2c_id,
 };
 

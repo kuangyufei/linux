@@ -1,10 +1,7 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /* Industrialio event test code.
  *
  * Copyright (c) 2011-2012 Lars-Peter Clausen <lars@metafoo.de>
- *
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU General Public License version 2 as published by
- * the Free Software Foundation.
  *
  * This program is primarily intended as an example application.
  * Reads the current buffer setup from sysfs and starts a short capture
@@ -122,6 +119,7 @@ static const char * const iio_modifier_names[] = {
 	[IIO_MOD_PM2P5] = "pm2p5",
 	[IIO_MOD_PM4] = "pm4",
 	[IIO_MOD_PM10] = "pm10",
+	[IIO_MOD_O2] = "o2",
 };
 
 static bool event_is_known(struct iio_event_data *event)
@@ -214,6 +212,7 @@ static bool event_is_known(struct iio_event_data *event)
 	case IIO_MOD_PM2P5:
 	case IIO_MOD_PM4:
 	case IIO_MOD_PM10:
+	case IIO_MOD_O2:
 		break;
 	default:
 		return false;

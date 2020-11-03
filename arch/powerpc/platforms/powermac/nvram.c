@@ -1,10 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  *  Copyright (C) 2002 Benjamin Herrenschmidt (benh@kernel.crashing.org)
- *
- *  This program is free software; you can redistribute it and/or
- *  modify it under the terms of the GNU General Public License
- *  as published by the Free Software Foundation; either version
- *  2 of the License, or (at your option) any later version.
  *
  *  Todo: - add support for the OF persistent properties
  */
@@ -59,7 +55,7 @@ struct chrp_header {
   u8		cksum;
   u16		len;
   char          name[12];
-  u8		data[0];
+  u8		data[];
 };
 
 struct core99_header {
@@ -519,6 +515,9 @@ static int __init core99_nvram_setup(struct device_node *dp, unsigned long addr)
 		return -EINVAL;
 	}
 	nvram_image = memblock_alloc(NVRAM_SIZE, SMP_CACHE_BYTES);
+	if (!nvram_image)
+		panic("%s: Failed to allocate %u bytes\n", __func__,
+		      NVRAM_SIZE);
 	nvram_data = ioremap(addr, NVRAM_SIZE*2);
 	nvram_naddrs = 1; /* Make sure we get the correct case */
 

@@ -23,14 +23,13 @@ struct sch_gpio {
 	struct gpio_chip chip;
 	spinlock_t lock;
 	unsigned short iobase;
-	unsigned short core_base;
 	unsigned short resume_base;
 };
 
-static unsigned sch_gpio_offset(struct sch_gpio *sch, unsigned gpio,
-				unsigned reg)
+static unsigned int sch_gpio_offset(struct sch_gpio *sch, unsigned int gpio,
+				unsigned int reg)
 {
-	unsigned base = 0;
+	unsigned int base = 0;
 
 	if (gpio >= sch->resume_base) {
 		gpio -= sch->resume_base;
@@ -40,14 +39,14 @@ static unsigned sch_gpio_offset(struct sch_gpio *sch, unsigned gpio,
 	return base + reg + gpio / 8;
 }
 
-static unsigned sch_gpio_bit(struct sch_gpio *sch, unsigned gpio)
+static unsigned int sch_gpio_bit(struct sch_gpio *sch, unsigned int gpio)
 {
 	if (gpio >= sch->resume_base)
 		gpio -= sch->resume_base;
 	return gpio % 8;
 }
 
-static int sch_gpio_reg_get(struct sch_gpio *sch, unsigned gpio, unsigned reg)
+static int sch_gpio_reg_get(struct sch_gpio *sch, unsigned int gpio, unsigned int reg)
 {
 	unsigned short offset, bit;
 	u8 reg_val;
@@ -60,7 +59,7 @@ static int sch_gpio_reg_get(struct sch_gpio *sch, unsigned gpio, unsigned reg)
 	return reg_val;
 }
 
-static void sch_gpio_reg_set(struct sch_gpio *sch, unsigned gpio, unsigned reg,
+static void sch_gpio_reg_set(struct sch_gpio *sch, unsigned int gpio, unsigned int reg,
 			     int val)
 {
 	unsigned short offset, bit;
@@ -77,7 +76,7 @@ static void sch_gpio_reg_set(struct sch_gpio *sch, unsigned gpio, unsigned reg,
 		outb((reg_val & ~BIT(bit)), sch->iobase + offset);
 }
 
-static int sch_gpio_direction_in(struct gpio_chip *gc, unsigned gpio_num)
+static int sch_gpio_direction_in(struct gpio_chip *gc, unsigned int gpio_num)
 {
 	struct sch_gpio *sch = gpiochip_get_data(gc);
 
@@ -87,13 +86,14 @@ static int sch_gpio_direction_in(struct gpio_chip *gc, unsigned gpio_num)
 	return 0;
 }
 
-static int sch_gpio_get(struct gpio_chip *gc, unsigned gpio_num)
+static int sch_gpio_get(struct gpio_chip *gc, unsigned int gpio_num)
 {
 	struct sch_gpio *sch = gpiochip_get_data(gc);
+
 	return sch_gpio_reg_get(sch, gpio_num, GLV);
 }
 
-static void sch_gpio_set(struct gpio_chip *gc, unsigned gpio_num, int val)
+static void sch_gpio_set(struct gpio_chip *gc, unsigned int gpio_num, int val)
 {
 	struct sch_gpio *sch = gpiochip_get_data(gc);
 
@@ -102,7 +102,7 @@ static void sch_gpio_set(struct gpio_chip *gc, unsigned gpio_num, int val)
 	spin_unlock(&sch->lock);
 }
 
-static int sch_gpio_direction_out(struct gpio_chip *gc, unsigned gpio_num,
+static int sch_gpio_direction_out(struct gpio_chip *gc, unsigned int gpio_num,
 				  int val)
 {
 	struct sch_gpio *sch = gpiochip_get_data(gc);
@@ -124,11 +124,14 @@ static int sch_gpio_direction_out(struct gpio_chip *gc, unsigned gpio_num,
 	return 0;
 }
 
-static int sch_gpio_get_direction(struct gpio_chip *gc, unsigned gpio_num)
+static int sch_gpio_get_direction(struct gpio_chip *gc, unsigned int gpio_num)
 {
 	struct sch_gpio *sch = gpiochip_get_data(gc);
 
-	return sch_gpio_reg_get(sch, gpio_num, GIO);
+	if (sch_gpio_reg_get(sch, gpio_num, GIO))
+		return GPIO_LINE_DIRECTION_IN;
+
+	return GPIO_LINE_DIRECTION_OUT;
 }
 
 static const struct gpio_chip sch_gpio_chip = {
@@ -166,7 +169,6 @@ static int sch_gpio_probe(struct platform_device *pdev)
 
 	switch (pdev->id) {
 	case PCI_DEVICE_ID_INTEL_SCH_LPC:
-		sch->core_base = 0;
 		sch->resume_base = 10;
 		sch->chip.ngpio = 14;
 
@@ -185,19 +187,16 @@ static int sch_gpio_probe(struct platform_device *pdev)
 		break;
 
 	case PCI_DEVICE_ID_INTEL_ITC_LPC:
-		sch->core_base = 0;
 		sch->resume_base = 5;
 		sch->chip.ngpio = 14;
 		break;
 
 	case PCI_DEVICE_ID_INTEL_CENTERTON_ILB:
-		sch->core_base = 0;
 		sch->resume_base = 21;
 		sch->chip.ngpio = 30;
 		break;
 
 	case PCI_DEVICE_ID_INTEL_QUARK_X1000_ILB:
-		sch->core_base = 0;
 		sch->resume_base = 2;
 		sch->chip.ngpio = 8;
 		break;

@@ -1,11 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * (C) 1999-2001 Paul `Rusty' Russell
  * (C) 2002-2006 Netfilter Core Team <coreteam@netfilter.org>
  * (C) 2011 Patrick McHardy <kaber@trash.net>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
  */
 
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
@@ -247,3 +244,4 @@ MODULE_ALIAS("ipt_SNAT");
 MODULE_ALIAS("ipt_DNAT");
 MODULE_ALIAS("ip6t_SNAT");
 MODULE_ALIAS("ip6t_DNAT");
+MODULE_DESCRIPTION("SNAT and DNAT targets support");

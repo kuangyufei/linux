@@ -1,7 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
- * This program is free software; you can redistribute it and/or modify it
- * under the terms of the GNU General Public License version 2 as published
- * by the Free Software Foundation.
  *
  * Copyright (C) 2013 John Crispin <john@phrozen.org>
  */
@@ -33,7 +31,7 @@ static const struct file_operations bootrom_file_ops = {
 	.release	= single_release,
 };
 
-static int bootrom_setup(void)
+static int __init bootrom_setup(void)
 {
 	debugfs_create_file("bootrom", 0444, NULL, NULL, &bootrom_file_ops);
 	return 0;

@@ -1,12 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * rt5651.c  --  RT5651 ALSA SoC audio codec driver
  *
  * Copyright 2014 Realtek Semiconductor Corp.
  * Author: Bard Liao <bardliao@realtek.com>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
  */
 
 #include <linux/module.h>
@@ -1517,7 +1514,7 @@ static int rt5651_set_bias_level(struct snd_soc_component *component,
 	switch (level) {
 	case SND_SOC_BIAS_PREPARE:
 		if (SND_SOC_BIAS_STANDBY == snd_soc_component_get_bias_level(component)) {
-			if (snd_soc_component_read32(component, RT5651_PLL_MODE_1) & 0x9200)
+			if (snd_soc_component_read(component, RT5651_PLL_MODE_1) & 0x9200)
 				snd_soc_component_update_bits(component, RT5651_D_MISC,
 						    0xc00, 0xc00);
 		}
@@ -1611,7 +1608,7 @@ static bool rt5651_micbias1_ovcd(struct snd_soc_component *component)
 {
 	int val;
 
-	val = snd_soc_component_read32(component, RT5651_IRQ_CTRL2);
+	val = snd_soc_component_read(component, RT5651_IRQ_CTRL2);
 	dev_dbg(component->dev, "irq ctrl2 %#04x\n", val);
 
 	return (val & RT5651_MB1_OC_CLR);
@@ -1628,7 +1625,7 @@ static bool rt5651_jack_inserted(struct snd_soc_component *component)
 		return val;
 	}
 
-	val = snd_soc_component_read32(component, RT5651_INT_IRQ_ST);
+	val = snd_soc_component_read(component, RT5651_INT_IRQ_ST);
 	dev_dbg(component->dev, "irq status %#04x\n", val);
 
 	switch (rt5651->jd_src) {
@@ -1645,7 +1642,10 @@ static bool rt5651_jack_inserted(struct snd_soc_component *component)
 		break;
 	}
 
-	return val == 0;
+	if (rt5651->jd_active_high)
+		return val != 0;
+	else
+		return val == 0;
 }
 
 /* Jack detect and button-press timings */
@@ -1770,6 +1770,9 @@ static int rt5651_detect_headset(struct snd_soc_component *component)
 
 static bool rt5651_support_button_press(struct rt5651_priv *rt5651)
 {
+	if (!rt5651->hp_jack)
+		return false;
+
 	/* Button press support only works with internal jack-detection */
 	return (rt5651->hp_jack->status & SND_JACK_MICROPHONE) &&
 		rt5651->gpiod_hp_det == NULL;
@@ -1868,20 +1871,47 @@ static void rt5651_enable_jack_detect(struct snd_soc_component *component,
 	case RT5651_JD1_1:
 		snd_soc_component_update_bits(component, RT5651_JD_CTRL2,
 			RT5651_JD_TRG_SEL_MASK, RT5651_JD_TRG_SEL_JD1_1);
-		snd_soc_component_update_bits(component, RT5651_IRQ_CTRL1,
-			RT5651_JD1_1_IRQ_EN, RT5651_JD1_1_IRQ_EN);
+		/* active-low is normal, set inv flag for active-high */
+		if (rt5651->jd_active_high)
+			snd_soc_component_update_bits(component,
+				RT5651_IRQ_CTRL1,
+				RT5651_JD1_1_IRQ_EN | RT5651_JD1_1_INV,
+				RT5651_JD1_1_IRQ_EN | RT5651_JD1_1_INV);
+		else
+			snd_soc_component_update_bits(component,
+				RT5651_IRQ_CTRL1,
+				RT5651_JD1_1_IRQ_EN | RT5651_JD1_1_INV,
+				RT5651_JD1_1_IRQ_EN);
 		break;
 	case RT5651_JD1_2:
 		snd_soc_component_update_bits(component, RT5651_JD_CTRL2,
 			RT5651_JD_TRG_SEL_MASK, RT5651_JD_TRG_SEL_JD1_2);
-		snd_soc_component_update_bits(component, RT5651_IRQ_CTRL1,
-			RT5651_JD1_2_IRQ_EN, RT5651_JD1_2_IRQ_EN);
+		/* active-low is normal, set inv flag for active-high */
+		if (rt5651->jd_active_high)
+			snd_soc_component_update_bits(component,
+				RT5651_IRQ_CTRL1,
+				RT5651_JD1_2_IRQ_EN | RT5651_JD1_2_INV,
+				RT5651_JD1_2_IRQ_EN | RT5651_JD1_2_INV);
+		else
+			snd_soc_component_update_bits(component,
+				RT5651_IRQ_CTRL1,
+				RT5651_JD1_2_IRQ_EN | RT5651_JD1_2_INV,
+				RT5651_JD1_2_IRQ_EN);
 		break;
 	case RT5651_JD2:
 		snd_soc_component_update_bits(component, RT5651_JD_CTRL2,
 			RT5651_JD_TRG_SEL_MASK, RT5651_JD_TRG_SEL_JD2);
-		snd_soc_component_update_bits(component, RT5651_IRQ_CTRL1,
-			RT5651_JD2_IRQ_EN, RT5651_JD2_IRQ_EN);
+		/* active-low is normal, set inv flag for active-high */
+		if (rt5651->jd_active_high)
+			snd_soc_component_update_bits(component,
+				RT5651_IRQ_CTRL1,
+				RT5651_JD2_IRQ_EN | RT5651_JD2_INV,
+				RT5651_JD2_IRQ_EN | RT5651_JD2_INV);
+		else
+			snd_soc_component_update_bits(component,
+				RT5651_IRQ_CTRL1,
+				RT5651_JD2_IRQ_EN | RT5651_JD2_INV,
+				RT5651_JD2_IRQ_EN);
 		break;
 	default:
 		dev_err(component->dev, "Currently only JD1_1 / JD1_2 / JD2 are supported\n");
@@ -1985,6 +2015,9 @@ static void rt5651_apply_properties(struct snd_soc_component *component)
 	if (device_property_read_u32(component->dev,
 				     "realtek,jack-detect-source", &val) == 0)
 		rt5651->jd_src = val;
+
+	if (device_property_read_bool(component->dev, "realtek,jack-detect-not-inverted"))
+		rt5651->jd_active_high = true;
 
 	/*
 	 * Testing on various boards has shown that good defaults for the OVCD

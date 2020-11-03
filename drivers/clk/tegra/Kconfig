@@ -1,7 +1,4 @@
-config TEGRA_CLK_EMC
-	def_bool y
-	depends on TEGRA124_EMC
-
+# SPDX-License-Identifier: GPL-2.0-only
 config CLK_TEGRA_BPMP
 	def_bool y
 	depends on TEGRA_BPMP

@@ -42,12 +42,9 @@ void rtl92cu_phy_rf6052_set_cck_txpower(struct ieee80211_hw *hw,
 	struct rtl_mac *mac = rtl_mac(rtl_priv(hw));
 	struct rtl_efuse *rtlefuse = rtl_efuse(rtl_priv(hw));
 	u32 tx_agc[2] = { 0, 0 }, tmpval = 0;
-	bool turbo_scanoff = false;
 	u8 idx1, idx2;
 	u8 *ptr;
 
-	if ((rtlefuse->eeprom_regulatory != 0) || (rtlefuse->external_pa))
-		turbo_scanoff = true;
 	if (mac->act_scanning) {
 		tx_agc[RF90_PATH_A] = 0x3f3f3f3f;
 		tx_agc[RF90_PATH_B] = 0x3f3f3f3f;
@@ -434,12 +431,12 @@ static bool _rtl92c_phy_rf6052_config_parafile(struct ieee80211_hw *hw)
 			break;
 		}
 		if (!rtstatus) {
-			RT_TRACE(rtlpriv, COMP_INIT, DBG_TRACE,
-				 "Radio[%d] Fail!!\n", rfpath);
+			rtl_dbg(rtlpriv, COMP_INIT, DBG_TRACE,
+				"Radio[%d] Fail!!\n", rfpath);
 			goto phy_rf_cfg_fail;
 		}
 	}
-	RT_TRACE(rtlpriv, COMP_INIT, DBG_TRACE, "<---\n");
+	rtl_dbg(rtlpriv, COMP_INIT, DBG_TRACE, "<---\n");
 phy_rf_cfg_fail:
 	return rtstatus;
 }

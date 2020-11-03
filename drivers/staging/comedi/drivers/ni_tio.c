@@ -234,7 +234,6 @@ static void ni_tio_set_bits_transient(struct ni_gpct *counter,
 		regs[reg] &= ~mask;
 		regs[reg] |= (value & mask);
 		ni_tio_write(counter, regs[reg] | transient, reg);
-		mmiowb();
 		spin_unlock_irqrestore(&counter_dev->regs_lock, flags);
 	}
 }
@@ -1343,8 +1342,8 @@ static int ni_m_gate2_to_generic_gate(unsigned int gate, unsigned int *src)
 
 static inline unsigned int ni_tio_get_gate_mode(struct ni_gpct *counter)
 {
-	unsigned int mode = ni_tio_get_soft_copy(
-		counter, NITIO_MODE_REG(counter->counter_index));
+	unsigned int mode = ni_tio_get_soft_copy(counter,
+				NITIO_MODE_REG(counter->counter_index));
 	unsigned int ret = 0;
 
 	if ((mode & GI_GATING_MODE_MASK) == GI_GATING_DISABLED)
@@ -1359,8 +1358,8 @@ static inline unsigned int ni_tio_get_gate_mode(struct ni_gpct *counter)
 
 static inline unsigned int ni_tio_get_gate2_mode(struct ni_gpct *counter)
 {
-	unsigned int mode = ni_tio_get_soft_copy(
-		counter, NITIO_GATE2_REG(counter->counter_index));
+	unsigned int mode = ni_tio_get_soft_copy(counter,
+				NITIO_GATE2_REG(counter->counter_index));
 	unsigned int ret = 0;
 
 	if (!(mode & GI_GATE2_MODE))
@@ -1682,9 +1681,11 @@ int ni_tio_insn_write(struct comedi_device *dev,
 	unsigned int cidx = counter->counter_index;
 	unsigned int chip = counter->chip_index;
 	unsigned int load_reg;
+	unsigned int load_val;
 
 	if (insn->n < 1)
 		return 0;
+	load_val = data[insn->n - 1];
 	switch (channel) {
 	case 0:
 		/*
@@ -1697,7 +1698,7 @@ int ni_tio_insn_write(struct comedi_device *dev,
 		 * load register is already selected.
 		 */
 		load_reg = ni_tio_next_load_register(counter);
-		ni_tio_write(counter, data[0], load_reg);
+		ni_tio_write(counter, load_val, load_reg);
 		ni_tio_set_bits_transient(counter, NITIO_CMD_REG(cidx),
 					  0, 0, GI_LOAD);
 		/* restore load reg */
@@ -1705,17 +1706,17 @@ int ni_tio_insn_write(struct comedi_device *dev,
 			     load_reg);
 		break;
 	case 1:
-		counter_dev->regs[chip][NITIO_LOADA_REG(cidx)] = data[0];
-		ni_tio_write(counter, data[0], NITIO_LOADA_REG(cidx));
+		counter_dev->regs[chip][NITIO_LOADA_REG(cidx)] = load_val;
+		ni_tio_write(counter, load_val, NITIO_LOADA_REG(cidx));
 		break;
 	case 2:
-		counter_dev->regs[chip][NITIO_LOADB_REG(cidx)] = data[0];
-		ni_tio_write(counter, data[0], NITIO_LOADB_REG(cidx));
+		counter_dev->regs[chip][NITIO_LOADB_REG(cidx)] = load_val;
+		ni_tio_write(counter, load_val, NITIO_LOADB_REG(cidx));
 		break;
 	default:
 		return -EINVAL;
 	}
-	return 0;
+	return insn->n;
 }
 EXPORT_SYMBOL_GPL(ni_tio_insn_write);
 

@@ -230,8 +230,8 @@ static int xrx200_poll_rx(struct napi_struct *napi, int budget)
 	}
 
 	if (rx < budget) {
-		napi_complete(&ch->napi);
-		ltq_dma_enable_irq(&ch->dma);
+		if (napi_complete_done(&ch->napi, rx))
+			ltq_dma_enable_irq(&ch->dma);
 	}
 
 	return rx;
@@ -245,6 +245,7 @@ static int xrx200_tx_housekeeping(struct napi_struct *napi, int budget)
 	int pkts = 0;
 	int bytes = 0;
 
+	netif_tx_lock(net_dev);
 	while (pkts < budget) {
 		struct ltq_dma_desc *desc = &ch->dma.desc_base[ch->tx_free];
 
@@ -268,15 +269,20 @@ static int xrx200_tx_housekeeping(struct napi_struct *napi, int budget)
 	net_dev->stats.tx_bytes += bytes;
 	netdev_completed_queue(ch->priv->net_dev, pkts, bytes);
 
+	netif_tx_unlock(net_dev);
+	if (netif_queue_stopped(net_dev))
+		netif_wake_queue(net_dev);
+
 	if (pkts < budget) {
-		napi_complete(&ch->napi);
-		ltq_dma_enable_irq(&ch->dma);
+		if (napi_complete_done(&ch->napi, pkts))
+			ltq_dma_enable_irq(&ch->dma);
 	}
 
 	return pkts;
 }
 
-static int xrx200_start_xmit(struct sk_buff *skb, struct net_device *net_dev)
+static netdev_tx_t xrx200_start_xmit(struct sk_buff *skb,
+				     struct net_device *net_dev)
 {
 	struct xrx200_priv *priv = netdev_priv(net_dev);
 	struct xrx200_chan *ch = &priv->chan_tx;
@@ -341,10 +347,12 @@ static irqreturn_t xrx200_dma_irq(int irq, void *ptr)
 {
 	struct xrx200_chan *ch = ptr;
 
-	ltq_dma_disable_irq(&ch->dma);
-	ltq_dma_ack_irq(&ch->dma);
+	if (napi_schedule_prep(&ch->napi)) {
+		__napi_schedule(&ch->napi);
+		ltq_dma_disable_irq(&ch->dma);
+	}
 
-	napi_schedule(&ch->napi);
+	ltq_dma_ack_irq(&ch->dma);
 
 	return IRQ_HANDLED;
 }
@@ -458,17 +466,11 @@ static int xrx200_probe(struct platform_device *pdev)
 	}
 
 	priv->chan_rx.dma.irq = platform_get_irq_byname(pdev, "rx");
-	if (priv->chan_rx.dma.irq < 0) {
-		dev_err(dev, "failed to get RX IRQ, %i\n",
-			priv->chan_rx.dma.irq);
+	if (priv->chan_rx.dma.irq < 0)
 		return -ENOENT;
-	}
 	priv->chan_tx.dma.irq = platform_get_irq_byname(pdev, "tx");
-	if (priv->chan_tx.dma.irq < 0) {
-		dev_err(dev, "failed to get TX IRQ, %i\n",
-			priv->chan_tx.dma.irq);
+	if (priv->chan_tx.dma.irq < 0)
 		return -ENOENT;
-	}
 
 	/* get the clock */
 	priv->clk = devm_clk_get(dev, NULL);
@@ -478,7 +480,7 @@ static int xrx200_probe(struct platform_device *pdev)
 	}
 
 	mac = of_get_mac_address(np);
-	if (mac && is_valid_ether_addr(mac))
+	if (!IS_ERR(mac))
 		ether_addr_copy(net_dev->dev_addr, mac);
 	else
 		eth_hw_addr_random(net_dev);
@@ -504,7 +506,7 @@ static int xrx200_probe(struct platform_device *pdev)
 
 	/* setup NAPI */
 	netif_napi_add(net_dev, &priv->chan_rx.napi, xrx200_poll_rx, 32);
-	netif_napi_add(net_dev, &priv->chan_tx.napi, xrx200_tx_housekeeping, 32);
+	netif_tx_napi_add(net_dev, &priv->chan_tx.napi, xrx200_tx_housekeeping, 32);
 
 	platform_set_drvdata(pdev, priv);
 

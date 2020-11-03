@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /*
  * drm gem CMA (contiguous memory allocator) helper functions
  *
@@ -6,26 +7,18 @@
  * Based on Samsung Exynos code
  *
  * Copyright (c) 2011 Samsung Electronics Co., Ltd.
- *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
  */
 
-#include <linux/mm.h>
-#include <linux/slab.h>
-#include <linux/mutex.h>
-#include <linux/export.h>
 #include <linux/dma-buf.h>
 #include <linux/dma-mapping.h>
+#include <linux/export.h>
+#include <linux/mm.h>
+#include <linux/mutex.h>
+#include <linux/slab.h>
 
-#include <drm/drmP.h>
 #include <drm/drm.h>
+#include <drm/drm_device.h>
+#include <drm/drm_drv.h>
 #include <drm/drm_gem_cma_helper.h>
 #include <drm/drm_vma_manager.h>
 
@@ -112,8 +105,8 @@ struct drm_gem_cma_object *drm_gem_cma_create(struct drm_device *drm,
 	cma_obj->vaddr = dma_alloc_wc(drm->dev, size, &cma_obj->paddr,
 				      GFP_KERNEL | __GFP_NOWARN);
 	if (!cma_obj->vaddr) {
-		dev_dbg(drm->dev, "failed to allocate buffer with size %zu\n",
-			size);
+		drm_dbg(drm, "failed to allocate buffer with size %zu\n",
+			 size);
 		ret = -ENOMEM;
 		goto error;
 	}
@@ -121,7 +114,7 @@ struct drm_gem_cma_object *drm_gem_cma_create(struct drm_device *drm,
 	return cma_obj;
 
 error:
-	drm_gem_object_put_unlocked(&cma_obj->base);
+	drm_gem_object_put(&cma_obj->base);
 	return ERR_PTR(ret);
 }
 EXPORT_SYMBOL_GPL(drm_gem_cma_create);
@@ -163,7 +156,7 @@ drm_gem_cma_create_with_handle(struct drm_file *file_priv,
 	 */
 	ret = drm_gem_handle_create(file_priv, gem_obj, handle);
 	/* drop reference from allocate - handle holds it now. */
-	drm_gem_object_put_unlocked(gem_obj);
+	drm_gem_object_put(gem_obj);
 	if (ret)
 		return ERR_PTR(ret);
 
@@ -186,13 +179,13 @@ void drm_gem_cma_free_object(struct drm_gem_object *gem_obj)
 
 	cma_obj = to_drm_gem_cma_obj(gem_obj);
 
-	if (cma_obj->vaddr) {
-		dma_free_wc(gem_obj->dev->dev, cma_obj->base.size,
-			    cma_obj->vaddr, cma_obj->paddr);
-	} else if (gem_obj->import_attach) {
+	if (gem_obj->import_attach) {
 		if (cma_obj->vaddr)
 			dma_buf_vunmap(gem_obj->import_attach->dmabuf, cma_obj->vaddr);
 		drm_prime_gem_destroy(gem_obj, cma_obj->sgt);
+	} else if (cma_obj->vaddr) {
+		dma_free_wc(gem_obj->dev->dev, cma_obj->base.size,
+			    cma_obj->vaddr, cma_obj->paddr);
 	}
 
 	drm_gem_object_release(gem_obj);
@@ -387,13 +380,13 @@ unsigned long drm_gem_cma_get_unmapped_area(struct file *filp,
 		return -EINVAL;
 
 	if (!drm_vma_node_is_allowed(node, priv)) {
-		drm_gem_object_put_unlocked(obj);
+		drm_gem_object_put(obj);
 		return -EACCES;
 	}
 
 	cma_obj = to_drm_gem_cma_obj(obj);
 
-	drm_gem_object_put_unlocked(obj);
+	drm_gem_object_put(obj);
 
 	return cma_obj->vaddr ? (unsigned long)cma_obj->vaddr : -EINVAL;
 }
@@ -478,26 +471,9 @@ drm_gem_cma_prime_import_sg_table(struct drm_device *dev,
 {
 	struct drm_gem_cma_object *cma_obj;
 
-	if (sgt->nents != 1) {
-		/* check if the entries in the sg_table are contiguous */
-		dma_addr_t next_addr = sg_dma_address(sgt->sgl);
-		struct scatterlist *s;
-		unsigned int i;
-
-		for_each_sg(sgt->sgl, s, sgt->nents, i) {
-			/*
-			 * sg_dma_address(s) is only valid for entries
-			 * that have sg_dma_len(s) != 0
-			 */
-			if (!sg_dma_len(s))
-				continue;
-
-			if (sg_dma_address(s) != next_addr)
-				return ERR_PTR(-EINVAL);
-
-			next_addr = sg_dma_address(s) + sg_dma_len(s);
-		}
-	}
+	/* check if the entries in the sg_table are contiguous */
+	if (drm_prime_get_contiguous_size(sgt) < attach->dmabuf->size)
+		return ERR_PTR(-EINVAL);
 
 	/* Create a CMA GEM buffer. */
 	cma_obj = __drm_gem_cma_create(dev, attach->dmabuf->size);
@@ -579,7 +555,7 @@ void drm_gem_cma_prime_vunmap(struct drm_gem_object *obj, void *vaddr)
 }
 EXPORT_SYMBOL_GPL(drm_gem_cma_prime_vunmap);
 
-static const struct drm_gem_object_funcs drm_cma_gem_default_funcs = {
+static const struct drm_gem_object_funcs drm_gem_cma_default_funcs = {
 	.free = drm_gem_cma_free_object,
 	.print_info = drm_gem_cma_print_info,
 	.get_sg_table = drm_gem_cma_prime_get_sg_table,
@@ -588,7 +564,7 @@ static const struct drm_gem_object_funcs drm_cma_gem_default_funcs = {
 };
 
 /**
- * drm_cma_gem_create_object_default_funcs - Create a CMA GEM object with a
+ * drm_gem_cma_create_object_default_funcs - Create a CMA GEM object with a
  *                                           default function table
  * @dev: DRM device
  * @size: Size of the object to allocate
@@ -600,7 +576,7 @@ static const struct drm_gem_object_funcs drm_cma_gem_default_funcs = {
  * A pointer to a allocated GEM object or an error pointer on failure.
  */
 struct drm_gem_object *
-drm_cma_gem_create_object_default_funcs(struct drm_device *dev, size_t size)
+drm_gem_cma_create_object_default_funcs(struct drm_device *dev, size_t size)
 {
 	struct drm_gem_cma_object *cma_obj;
 
@@ -608,11 +584,11 @@ drm_cma_gem_create_object_default_funcs(struct drm_device *dev, size_t size)
 	if (!cma_obj)
 		return NULL;
 
-	cma_obj->base.funcs = &drm_cma_gem_default_funcs;
+	cma_obj->base.funcs = &drm_gem_cma_default_funcs;
 
 	return &cma_obj->base;
 }
-EXPORT_SYMBOL(drm_cma_gem_create_object_default_funcs);
+EXPORT_SYMBOL(drm_gem_cma_create_object_default_funcs);
 
 /**
  * drm_gem_cma_prime_import_sg_table_vmap - PRIME import another driver's
@@ -627,7 +603,7 @@ EXPORT_SYMBOL(drm_cma_gem_create_object_default_funcs);
  * address set. This address is released when the object is freed.
  *
  * This function can be used as the &drm_driver.gem_prime_import_sg_table
- * callback. The DRM_GEM_CMA_VMAP_DRIVER_OPS() macro provides a shortcut to set
+ * callback. The &DRM_GEM_CMA_DRIVER_OPS_VMAP macro provides a shortcut to set
  * the necessary DRM driver operations.
  *
  * Returns:

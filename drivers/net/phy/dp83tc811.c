@@ -139,16 +139,19 @@ static int dp83811_set_wol(struct phy_device *phydev,
 			value &= ~DP83811_WOL_SECURE_ON;
 		}
 
-		value |= (DP83811_WOL_EN | DP83811_WOL_INDICATION_SEL |
-			  DP83811_WOL_CLR_INDICATION);
-		phy_write_mmd(phydev, DP83811_DEVADDR, MII_DP83811_WOL_CFG,
-			      value);
+		/* Clear any pending WoL interrupt */
+		phy_read(phydev, MII_DP83811_INT_STAT1);
+
+		value |= DP83811_WOL_EN | DP83811_WOL_INDICATION_SEL |
+			 DP83811_WOL_CLR_INDICATION;
+
+		return phy_write_mmd(phydev, DP83811_DEVADDR,
+				     MII_DP83811_WOL_CFG, value);
 	} else {
-		phy_clear_bits_mmd(phydev, DP83811_DEVADDR, MII_DP83811_WOL_CFG,
-				   DP83811_WOL_EN);
+		return phy_clear_bits_mmd(phydev, DP83811_DEVADDR,
+					  MII_DP83811_WOL_CFG, DP83811_WOL_EN);
 	}
 
-	return 0;
 }
 
 static void dp83811_get_wol(struct phy_device *phydev,
@@ -277,10 +280,6 @@ static int dp83811_config_init(struct phy_device *phydev)
 {
 	int value, err;
 
-	err = genphy_config_init(phydev);
-	if (err < 0)
-		return err;
-
 	value = phy_read(phydev, MII_DP83811_SGMII_CTRL);
 	if (phydev->interface == PHY_INTERFACE_MODE_SGMII) {
 		err = phy_write(phydev, MII_DP83811_SGMII_CTRL,
@@ -296,8 +295,8 @@ static int dp83811_config_init(struct phy_device *phydev)
 
 	value = DP83811_WOL_MAGIC_EN | DP83811_WOL_SECURE_ON | DP83811_WOL_EN;
 
-	return phy_write_mmd(phydev, DP83811_DEVADDR, MII_DP83811_WOL_CFG,
-	      value);
+	return phy_clear_bits_mmd(phydev, DP83811_DEVADDR, MII_DP83811_WOL_CFG,
+				  value);
 }
 
 static int dp83811_phy_reset(struct phy_device *phydev)
@@ -338,7 +337,7 @@ static struct phy_driver dp83811_driver[] = {
 		.phy_id = DP83TC811_PHY_ID,
 		.phy_id_mask = 0xfffffff0,
 		.name = "TI DP83TC811",
-		.features = PHY_BASIC_FEATURES,
+		/* PHY_BASIC_FEATURES */
 		.config_init = dp83811_config_init,
 		.config_aneg = dp83811_config_aneg,
 		.soft_reset = dp83811_phy_reset,

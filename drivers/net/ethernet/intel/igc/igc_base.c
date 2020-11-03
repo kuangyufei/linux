@@ -10,50 +10,6 @@
 #include "igc.h"
 
 /**
- * igc_set_pcie_completion_timeout - set pci-e completion timeout
- * @hw: pointer to the HW structure
- */
-static s32 igc_set_pcie_completion_timeout(struct igc_hw *hw)
-{
-	u32 gcr = rd32(IGC_GCR);
-	u16 pcie_devctl2;
-	s32 ret_val = 0;
-
-	/* only take action if timeout value is defaulted to 0 */
-	if (gcr & IGC_GCR_CMPL_TMOUT_MASK)
-		goto out;
-
-	/* if capabilities version is type 1 we can write the
-	 * timeout of 10ms to 200ms through the GCR register
-	 */
-	if (!(gcr & IGC_GCR_CAP_VER2)) {
-		gcr |= IGC_GCR_CMPL_TMOUT_10ms;
-		goto out;
-	}
-
-	/* for version 2 capabilities we need to write the config space
-	 * directly in order to set the completion timeout value for
-	 * 16ms to 55ms
-	 */
-	ret_val = igc_read_pcie_cap_reg(hw, PCIE_DEVICE_CONTROL2,
-					&pcie_devctl2);
-	if (ret_val)
-		goto out;
-
-	pcie_devctl2 |= PCIE_DEVICE_CONTROL2_16ms;
-
-	ret_val = igc_write_pcie_cap_reg(hw, PCIE_DEVICE_CONTROL2,
-					 &pcie_devctl2);
-out:
-	/* disable completion timeout resend */
-	gcr &= ~IGC_GCR_CMPL_TMOUT_RESEND;
-
-	wr32(IGC_GCR, gcr);
-
-	return ret_val;
-}
-
-/**
  * igc_reset_hw_base - Reset hardware
  * @hw: pointer to the HW structure
  *
@@ -70,12 +26,7 @@ static s32 igc_reset_hw_base(struct igc_hw *hw)
 	 */
 	ret_val = igc_disable_pcie_master(hw);
 	if (ret_val)
-		hw_dbg("PCI-E Master disable polling has failed.\n");
-
-	/* set the completion timeout for interface */
-	ret_val = igc_set_pcie_completion_timeout(hw);
-	if (ret_val)
-		hw_dbg("PCI-E Set completion timeout has failed.\n");
+		hw_dbg("PCI-E Master disable polling has failed\n");
 
 	hw_dbg("Masking off all interrupts\n");
 	wr32(IGC_IMC, 0xffffffff);
@@ -89,7 +40,7 @@ static s32 igc_reset_hw_base(struct igc_hw *hw)
 	ctrl = rd32(IGC_CTRL);
 
 	hw_dbg("Issuing a global reset to MAC\n");
-	wr32(IGC_CTRL, ctrl | IGC_CTRL_RST);
+	wr32(IGC_CTRL, ctrl | IGC_CTRL_DEV_RST);
 
 	ret_val = igc_get_auto_rd_done(hw);
 	if (ret_val) {
@@ -226,7 +177,7 @@ static s32 igc_init_phy_params_base(struct igc_hw *hw)
 	 */
 	ret_val = hw->phy.ops.reset(hw);
 	if (ret_val) {
-		hw_dbg("Error resetting the PHY.\n");
+		hw_dbg("Error resetting the PHY\n");
 		goto out;
 	}
 
@@ -258,6 +209,18 @@ static s32 igc_get_invariants_base(struct igc_hw *hw)
 	switch (hw->device_id) {
 	case IGC_DEV_ID_I225_LM:
 	case IGC_DEV_ID_I225_V:
+	case IGC_DEV_ID_I225_I:
+	case IGC_DEV_ID_I220_V:
+	case IGC_DEV_ID_I225_K:
+	case IGC_DEV_ID_I225_K2:
+	case IGC_DEV_ID_I225_LMVP:
+	case IGC_DEV_ID_I225_IT:
+	case IGC_DEV_ID_I226_LM:
+	case IGC_DEV_ID_I226_V:
+	case IGC_DEV_ID_I226_IT:
+	case IGC_DEV_ID_I221_V:
+	case IGC_DEV_ID_I226_BLANK_NVM:
+	case IGC_DEV_ID_I225_BLANK_NVM:
 		mac->type = igc_i225;
 		break;
 	default:
@@ -409,7 +372,7 @@ void igc_rx_fifo_flush_base(struct igc_hw *hw)
 	}
 
 	if (ms_wait == 10)
-		pr_debug("Queue disable timed out after 10ms\n");
+		hw_dbg("Queue disable timed out after 10ms\n");
 
 	/* Clear RLPML, RCTL.SBP, RFCTL.LEF, and set RCTL.LPE so that all
 	 * incoming packets are rejected.  Set enable and wait 2ms so that

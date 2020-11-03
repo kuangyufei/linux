@@ -32,6 +32,7 @@
 struct drm_clip_rect;
 struct drm_device;
 struct drm_file;
+struct drm_format_info;
 struct drm_framebuffer;
 struct drm_gem_object;
 
@@ -85,6 +86,9 @@ struct drm_framebuffer_funcs {
 	 * See documentation in drm_mode.h for the struct drm_mode_fb_dirty_cmd
 	 * for more information as all the semantics and arguments have a one to
 	 * one mapping on this function.
+	 *
+	 * Atomic drivers should use drm_atomic_helper_dirtyfb() to implement
+	 * this hook.
 	 *
 	 * RETURNS:
 	 *
@@ -292,5 +296,43 @@ int drm_framebuffer_plane_width(int width,
 				const struct drm_framebuffer *fb, int plane);
 int drm_framebuffer_plane_height(int height,
 				 const struct drm_framebuffer *fb, int plane);
+
+/**
+ * struct drm_afbc_framebuffer - a special afbc frame buffer object
+ *
+ * A derived class of struct drm_framebuffer, dedicated for afbc use cases.
+ */
+struct drm_afbc_framebuffer {
+	/**
+	 * @base: base framebuffer structure.
+	 */
+	struct drm_framebuffer base;
+	/**
+	 * @block_width: width of a single afbc block
+	 */
+	u32 block_width;
+	/**
+	 * @block_height: height of a single afbc block
+	 */
+	u32 block_height;
+	/**
+	 * @aligned_width: aligned frame buffer width
+	 */
+	u32 aligned_width;
+	/**
+	 * @aligned_height: aligned frame buffer height
+	 */
+	u32 aligned_height;
+	/**
+	 * @offset: offset of the first afbc header
+	 */
+	u32 offset;
+	/**
+	 * @afbc_size: minimum size of afbc buffer
+	 */
+	u32 afbc_size;
+};
+
+#define fb_to_afbc_fb(x) container_of(x, struct drm_afbc_framebuffer, base)
 
 #endif

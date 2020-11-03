@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  * APEI Boot Error Record Table (BERT) support
  *
@@ -16,9 +17,6 @@
  *
  * For more information about BERT, please refer to ACPI Specification
  * version 4.0, section 17.3.1
- *
- * This file is licensed under GPLv2.
- *
  */
 
 #include <linux/kernel.h>
@@ -121,7 +119,7 @@ static int __init bert_init(void)
 	rc = bert_check_table(bert_tab);
 	if (rc) {
 		pr_err(FW_BUG "table invalid.\n");
-		return rc;
+		goto out_put_bert_tab;
 	}
 
 	region_len = bert_tab->region_length;
@@ -129,7 +127,7 @@ static int __init bert_init(void)
 	rc = apei_resources_add(&bert_resources, bert_tab->address,
 				region_len, true);
 	if (rc)
-		return rc;
+		goto out_put_bert_tab;
 	rc = apei_resources_request(&bert_resources, "APEI BERT");
 	if (rc)
 		goto out_fini;
@@ -144,6 +142,8 @@ static int __init bert_init(void)
 	apei_resources_release(&bert_resources);
 out_fini:
 	apei_resources_fini(&bert_resources);
+out_put_bert_tab:
+	acpi_put_table((struct acpi_table_header *)bert_tab);
 
 	return rc;
 }

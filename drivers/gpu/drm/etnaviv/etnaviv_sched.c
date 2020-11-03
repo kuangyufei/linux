@@ -3,7 +3,7 @@
  * Copyright (C) 2017 Etnaviv Project
  */
 
-#include <linux/kthread.h>
+#include <linux/moduleparam.h>
 
 #include "etnaviv_drv.h"
 #include "etnaviv_dump.h"
@@ -89,12 +89,15 @@ static void etnaviv_sched_timedout_job(struct drm_sched_job *sched_job)
 	u32 dma_addr;
 	int change;
 
+	/* block scheduler */
+	drm_sched_stop(&gpu->sched, sched_job);
+
 	/*
 	 * If the GPU managed to complete this jobs fence, the timout is
 	 * spurious. Bail out.
 	 */
 	if (dma_fence_is_signaled(submit->out_fence))
-		return;
+		goto out_no_timeout;
 
 	/*
 	 * If the GPU is still making forward progress on the front-end (which
@@ -105,21 +108,19 @@ static void etnaviv_sched_timedout_job(struct drm_sched_job *sched_job)
 	change = dma_addr - gpu->hangcheck_dma_addr;
 	if (change < 0 || change > 16) {
 		gpu->hangcheck_dma_addr = dma_addr;
-		return;
+		goto out_no_timeout;
 	}
-
-	/* block scheduler */
-	drm_sched_stop(&gpu->sched);
 
 	if(sched_job)
 		drm_sched_increase_karma(sched_job);
 
 	/* get the GPU back into the init state */
-	etnaviv_core_dump(gpu);
+	etnaviv_core_dump(submit);
 	etnaviv_gpu_recover_hang(gpu);
 
 	drm_sched_resubmit_jobs(&gpu->sched);
 
+out_no_timeout:
 	/* restart scheduler after GPU is usable again */
 	drm_sched_start(&gpu->sched, true);
 }
@@ -153,7 +154,7 @@ int etnaviv_sched_push_job(struct drm_sched_entity *sched_entity,
 	mutex_lock(&submit->gpu->fence_lock);
 
 	ret = drm_sched_job_init(&submit->sched_job, sched_entity,
-				 submit->cmdbuf.ctx);
+				 submit->ctx);
 	if (ret)
 		goto out_unlock;
 

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-or-later
 /* Sensirion SHT3x-DIS humidity and temperature sensor driver.
  * The SHT3x comes in many different versions, this driver is for the
  * I2C version only.
@@ -5,17 +6,6 @@
  * Copyright (C) 2016 Sensirion AG, Switzerland
  * Author: David Frey <david.frey@sensirion.com>
  * Author: Pascal Sachs <pascal.sachs@sensirion.com>
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
  */
 
 #include <asm/page.h>
@@ -672,8 +662,9 @@ static struct attribute *sts3x_attrs[] = {
 ATTRIBUTE_GROUPS(sht3x);
 ATTRIBUTE_GROUPS(sts3x);
 
-static int sht3x_probe(struct i2c_client *client,
-		       const struct i2c_device_id *id)
+static const struct i2c_device_id sht3x_ids[];
+
+static int sht3x_probe(struct i2c_client *client)
 {
 	int ret;
 	struct sht3x_data *data;
@@ -725,7 +716,7 @@ static int sht3x_probe(struct i2c_client *client,
 	if (ret)
 		return ret;
 
-	if (id->driver_data == sts3x)
+	if (i2c_match_id(sht3x_ids, client)->driver_data == sts3x)
 		attribute_groups = sts3x_groups;
 	else
 		attribute_groups = sht3x_groups;
@@ -752,7 +743,7 @@ MODULE_DEVICE_TABLE(i2c, sht3x_ids);
 
 static struct i2c_driver sht3x_i2c_driver = {
 	.driver.name = "sht3x",
-	.probe       = sht3x_probe,
+	.probe_new   = sht3x_probe,
 	.id_table    = sht3x_ids,
 };
 

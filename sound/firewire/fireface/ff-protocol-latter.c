@@ -9,14 +9,15 @@
 
 #include "ff.h"
 
-#define LATTER_STF		0xffff00000004
-#define LATTER_ISOC_CHANNELS	0xffff00000008
-#define LATTER_ISOC_START	0xffff0000000c
-#define LATTER_FETCH_MODE	0xffff00000010
-#define LATTER_SYNC_STATUS	0x0000801c0000
+#define LATTER_STF		0xffff00000004ULL
+#define LATTER_ISOC_CHANNELS	0xffff00000008ULL
+#define LATTER_ISOC_START	0xffff0000000cULL
+#define LATTER_FETCH_MODE	0xffff00000010ULL
+#define LATTER_SYNC_STATUS	0x0000801c0000ULL
 
 static int parse_clock_bits(u32 data, unsigned int *rate,
-			    enum snd_ff_clock_src *src)
+			    enum snd_ff_clock_src *src,
+			    enum snd_ff_unit_version unit_version)
 {
 	static const struct {
 		unsigned int rate;
@@ -42,6 +43,11 @@ static int parse_clock_bits(u32 data, unsigned int *rate,
 		{ SND_FF_CLOCK_SRC_INTERNAL,	0x00000e00, },
 	};
 	int i;
+
+	if (unit_version != SND_FF_UNIT_VERSION_UCX) {
+		// e.g. 0x00fe0f20 but expected 0x00eff002.
+		data = ((data & 0xf0f0f0f0) >> 4) | ((data & 0x0f0f0f0f) << 4);
+	}
 
 	for (i = 0; i < ARRAY_SIZE(rate_entries); ++i) {
 		rate_entry = rate_entries + i;
@@ -79,7 +85,7 @@ static int latter_get_clock(struct snd_ff *ff, unsigned int *rate,
 		return err;
 	data = le32_to_cpu(reg);
 
-	return parse_clock_bits(data, rate, src);
+	return parse_clock_bits(data, rate, src, ff->unit_version);
 }
 
 static int latter_switch_fetching_mode(struct snd_ff *ff, bool enable)
@@ -97,75 +103,31 @@ static int latter_switch_fetching_mode(struct snd_ff *ff, bool enable)
 				  LATTER_FETCH_MODE, &reg, sizeof(reg), 0);
 }
 
-static int keep_resources(struct snd_ff *ff, unsigned int rate)
+static int latter_allocate_resources(struct snd_ff *ff, unsigned int rate)
 {
 	enum snd_ff_stream_mode mode;
-	int i;
-	int err;
-
-	// Check whether the given value is supported or not.
-	for (i = 0; i < CIP_SFC_COUNT; i++) {
-		if (amdtp_rate_table[i] == rate)
-			break;
-	}
-	if (i >= CIP_SFC_COUNT)
-		return -EINVAL;
-
-	err = snd_ff_stream_get_multiplier_mode(i, &mode);
-	if (err < 0)
-		return err;
-
-	/* Keep resources for in-stream. */
-	ff->tx_resources.channels_mask = 0x00000000000000ffuLL;
-	err = fw_iso_resources_allocate(&ff->tx_resources,
-			amdtp_stream_get_max_payload(&ff->tx_stream),
-			fw_parent_device(ff->unit)->max_speed);
-	if (err < 0)
-		return err;
-
-	/* Keep resources for out-stream. */
-	ff->rx_resources.channels_mask = 0x00000000000000ffuLL;
-	err = fw_iso_resources_allocate(&ff->rx_resources,
-			amdtp_stream_get_max_payload(&ff->rx_stream),
-			fw_parent_device(ff->unit)->max_speed);
-	if (err < 0)
-		fw_iso_resources_free(&ff->tx_resources);
-
-	return err;
-}
-
-static int latter_begin_session(struct snd_ff *ff, unsigned int rate)
-{
-	static const struct {
-		unsigned int stf;
-		unsigned int code;
-		unsigned int flag;
-	} *entry, rate_table[] = {
-		{ 32000,  0x00, 0x92, },
-		{ 44100,  0x02, 0x92, },
-		{ 48000,  0x04, 0x92, },
-		{ 64000,  0x08, 0x8e, },
-		{ 88200,  0x0a, 0x8e, },
-		{ 96000,  0x0c, 0x8e, },
-		{ 128000, 0x10, 0x8c, },
-		{ 176400, 0x12, 0x8c, },
-		{ 192000, 0x14, 0x8c, },
-	};
-	u32 data;
+	unsigned int code;
 	__le32 reg;
 	unsigned int count;
 	int i;
 	int err;
 
-	for (i = 0; i < ARRAY_SIZE(rate_table); ++i) {
-		entry = rate_table + i;
-		if (entry->stf == rate)
-			break;
-	}
-	if (i == ARRAY_SIZE(rate_table))
+	// Set the number of data blocks transferred in a second.
+	if (rate % 48000 == 0)
+		code = 0x04;
+	else if (rate % 44100 == 0)
+		code = 0x02;
+	else if (rate % 32000 == 0)
+		code = 0x00;
+	else
 		return -EINVAL;
 
-	reg = cpu_to_le32(entry->code);
+	if (rate >= 64000 && rate < 128000)
+		code |= 0x08;
+	else if (rate >= 128000)
+		code |= 0x10;
+
+	reg = cpu_to_le32(code);
 	err = snd_fw_transaction(ff->unit, TCODE_WRITE_QUADLET_REQUEST,
 				 LATTER_STF, &reg, sizeof(reg), 0);
 	if (err < 0)
@@ -184,12 +146,81 @@ static int latter_begin_session(struct snd_ff *ff, unsigned int rate)
 		if (curr_rate == rate)
 			break;
 	}
-	if (count == 10)
+	if (count > 10)
 		return -ETIMEDOUT;
 
-	err = keep_resources(ff, rate);
+	for (i = 0; i < ARRAY_SIZE(amdtp_rate_table); ++i) {
+		if (rate == amdtp_rate_table[i])
+			break;
+	}
+	if (i == ARRAY_SIZE(amdtp_rate_table))
+		return -EINVAL;
+
+	err = snd_ff_stream_get_multiplier_mode(i, &mode);
 	if (err < 0)
 		return err;
+
+	// Keep resources for in-stream.
+	ff->tx_resources.channels_mask = 0x00000000000000ffuLL;
+	err = fw_iso_resources_allocate(&ff->tx_resources,
+			amdtp_stream_get_max_payload(&ff->tx_stream),
+			fw_parent_device(ff->unit)->max_speed);
+	if (err < 0)
+		return err;
+
+	// Keep resources for out-stream.
+	ff->rx_resources.channels_mask = 0x00000000000000ffuLL;
+	err = fw_iso_resources_allocate(&ff->rx_resources,
+			amdtp_stream_get_max_payload(&ff->rx_stream),
+			fw_parent_device(ff->unit)->max_speed);
+	if (err < 0)
+		fw_iso_resources_free(&ff->tx_resources);
+
+	return err;
+}
+
+static int latter_begin_session(struct snd_ff *ff, unsigned int rate)
+{
+	unsigned int generation = ff->rx_resources.generation;
+	unsigned int flag;
+	u32 data;
+	__le32 reg;
+	int err;
+
+	if (ff->unit_version == SND_FF_UNIT_VERSION_UCX) {
+		// For Fireface UCX. Always use the maximum number of data
+		// channels in data block of packet.
+		if (rate >= 32000 && rate <= 48000)
+			flag = 0x92;
+		else if (rate >= 64000 && rate <= 96000)
+			flag = 0x8e;
+		else if (rate >= 128000 && rate <= 192000)
+			flag = 0x8c;
+		else
+			return -EINVAL;
+	} else {
+		// For Fireface UFX and 802. Due to bandwidth limitation on
+		// IEEE 1394a (400 Mbps), Analog 1-12 and AES are available
+		// without any ADAT at quadruple speed.
+		if (rate >= 32000 && rate <= 48000)
+			flag = 0x9e;
+		else if (rate >= 64000 && rate <= 96000)
+			flag = 0x96;
+		else if (rate >= 128000 && rate <= 192000)
+			flag = 0x8e;
+		else
+			return -EINVAL;
+	}
+
+	if (generation != fw_parent_device(ff->unit)->card->generation) {
+		err = fw_iso_resources_update(&ff->tx_resources);
+		if (err < 0)
+			return err;
+
+		err = fw_iso_resources_update(&ff->rx_resources);
+		if (err < 0)
+			return err;
+	}
 
 	data = (ff->tx_resources.channel << 8) | ff->rx_resources.channel;
 	reg = cpu_to_le32(data);
@@ -198,9 +229,7 @@ static int latter_begin_session(struct snd_ff *ff, unsigned int rate)
 	if (err < 0)
 		return err;
 
-	// Always use the maximum number of data channels in data block of
-	// packet.
-	reg = cpu_to_le32(entry->flag);
+	reg = cpu_to_le32(flag);
 	return snd_fw_transaction(ff->unit, TCODE_WRITE_QUADLET_REQUEST,
 				  LATTER_ISOC_START, &reg, sizeof(reg), 0);
 }
@@ -254,7 +283,7 @@ static void latter_dump_status(struct snd_ff *ff, struct snd_info_buffer *buffer
 		}
 	}
 
-	err = parse_clock_bits(data, &rate, &src);
+	err = parse_clock_bits(data, &rate, &src, ff->unit_version);
 	if (err < 0)
 		return;
 	label = snd_ff_proc_get_clk_label(src);
@@ -424,6 +453,7 @@ const struct snd_ff_protocol snd_ff_protocol_latter = {
 	.fill_midi_msg		= latter_fill_midi_msg,
 	.get_clock		= latter_get_clock,
 	.switch_fetching_mode	= latter_switch_fetching_mode,
+	.allocate_resources	= latter_allocate_resources,
 	.begin_session		= latter_begin_session,
 	.finish_session		= latter_finish_session,
 	.dump_status		= latter_dump_status,
